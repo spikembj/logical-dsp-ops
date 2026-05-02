@@ -44,6 +44,7 @@ supabase/.branches/
 # editor / OS
 .idea/
 .vscode/
+.claude/settings.local.json
 
 # vercel
 .vercel
