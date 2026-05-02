@@ -63,8 +63,19 @@ interface PdfTextItem {
 async function extractTextItems(bytes: Uint8Array): Promise<PdfTextItem[]> {
   // Lazy import — the legacy build is the one that runs in Node.
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  // pdfjs's TS types are conservative; the runtime accepts these node-friendly
-  // options even though they aren't in the public type. Cast via `Parameters`.
+
+  // Tell pdfjs where its worker file lives. In Node we resolve from
+  // node_modules; the worker still runs on the main thread but pdfjs needs
+  // the path for its internal bookkeeping. (Without this, pdfjs tries a
+  // bundler-resolved relative import that fails in Next/Turbopack.)
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    const { createRequire } = await import("node:module");
+    const require = createRequire(import.meta.url);
+    pdfjs.GlobalWorkerOptions.workerSrc = require.resolve(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs",
+    );
+  }
+
   type GetDocOptions = Parameters<typeof pdfjs.getDocument>[0];
   const doc = await pdfjs.getDocument({
     data: bytes,
