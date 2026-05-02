@@ -29,17 +29,21 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const next = params.next;
 
   return (
-    <div className="w-full max-w-sm space-y-6">
-      <div className="text-center space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Logical Ops</h1>
-        <p className="text-sm text-muted-foreground">Sign in to continue.</p>
-      </div>
-      {inactive && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          Your account is inactive. Ask an admin to reactivate it.
+    <div className="w-full max-w-sm">
+      <div className="rounded-2xl border bg-card text-card-foreground shadow-sm p-7 space-y-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Logical Ops</h1>
+          <p className="text-sm text-muted-foreground">
+            Sign in to continue.
+          </p>
         </div>
-      )}
-      <LoginForm next={next ?? "/"} />
+        {inactive && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            Your account is inactive. Ask an admin to reactivate it.
+          </div>
+        )}
+        <LoginForm next={next ?? "/"} />
+      </div>
     </div>
   );
 }
