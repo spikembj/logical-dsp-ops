@@ -45,18 +45,18 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or transporter ID..."
-            className="pl-8 pr-8"
+            className="pl-9 pr-9"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               aria-label="Clear search"
             >
               <X className="h-4 w-4" />
