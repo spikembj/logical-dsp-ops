@@ -1,0 +1,27 @@
+-- =============================================================================
+-- Seed / bootstrap snippets. Run pieces of this manually in the Supabase SQL
+-- editor — NOT run automatically by migrations.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- First admin: after you sign up via the app once with your real email,
+-- run this to create your public.users row and flip your role to admin.
+--
+-- Replace 'you@example.com' with the email you signed up with.
+-- -----------------------------------------------------------------------------
+-- insert into public.users (id, email, full_name, role, active)
+-- select id, email, coalesce(raw_user_meta_data->>'full_name', email), 'admin', true
+-- from auth.users
+-- where email = 'you@example.com'
+-- on conflict (id) do update
+--   set role = 'admin', active = true;
+
+-- -----------------------------------------------------------------------------
+-- Optional: a few demo drivers for local-only development.
+-- Do NOT run this against production.
+-- -----------------------------------------------------------------------------
+-- insert into public.drivers (transporter_id, full_name, hire_date, status, approved_vehicle_types)
+-- values
+--   ('A1B2C3D4E5F6G7', 'Jane Demo', '2025-01-15', 'active', '{cdv,edv}'),
+--   ('A2B3C4D5E6F7G8', 'John Demo', '2024-09-01', 'active', '{step_van}'),
+--   ('A3B4C5D6E7F8G9', 'Ex Driver', '2024-03-10', 'terminated', '{}');

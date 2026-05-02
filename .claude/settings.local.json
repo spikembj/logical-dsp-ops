@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --use-npm --turbopack --no-install)",
+      "Bash(npm install *)",
+      "Bash(brew list *)",
+      "Bash(docker --version)",
+      "Bash(npx supabase *)",
+      "Bash(npx --yes shadcn@latest init --yes --base-color slate)",
+      "Bash(npx --yes shadcn@latest init --help)",
+      "Bash(npx --yes shadcn@latest init --defaults --yes --force)",
+      "Bash(npx --yes shadcn@latest add input label table dialog badge tabs card select textarea sonner dropdown-menu separator skeleton alert form checkbox --yes --silent)",
+      "Bash(git check-ignore *)",
+      "Bash(npx next *)",
+      "Bash(xxd node_modules/cookie/package.json)",
+      "Bash(xattr -l node_modules/cookie/package.json)",
+      "Bash(xxd .gitignore)",
+      "Bash(rm -f .git/index.lock)",
+      "Bash(git add *)"
+    ]
+  }
+}
