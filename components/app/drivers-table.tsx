@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -44,19 +43,20 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
+        <div className="flex items-center h-9 w-full sm:max-w-xs rounded-lg border border-input bg-transparent transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+          <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or transporter ID..."
-            className="pl-9 pr-9"
+            placeholder="Search name or transporter ID"
+            className="flex-1 min-w-0 px-2 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="mr-2.5 shrink-0 text-muted-foreground hover:text-foreground"
               aria-label="Clear search"
             >
               <X className="h-4 w-4" />
