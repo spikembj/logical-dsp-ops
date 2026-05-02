@@ -45,6 +45,9 @@ supabase/.branches/
 .idea/
 .vscode/
 .claude/settings.local.json
+*.swp
+*.swo
+*~
 
 # vercel
 .vercel
