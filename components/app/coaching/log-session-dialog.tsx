@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,29 +18,65 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createCoachingSession } from "@/app/actions/coaching";
+import {
+  createCoachingSession,
+  updateCoachingSession,
+} from "@/app/actions/coaching";
 import { todayIso } from "@/lib/format/dates";
+import { cn } from "@/lib/utils";
 
-interface Props {
+type CreateProps = {
+  mode?: "create";
   driverId: string;
   driverName: string;
-}
+};
 
-export function LogSessionDialog({ driverId, driverName }: Props) {
+type EditProps = {
+  mode: "edit";
+  driverId: string;
+  driverName: string;
+  session: {
+    id: string;
+    session_date: string;
+    topic: string;
+    notes: string | null;
+    acknowledged: boolean;
+  };
+};
+
+type Props = CreateProps | EditProps;
+
+export function LogSessionDialog(props: Props) {
   const router = useRouter();
+  const isEdit = props.mode === "edit";
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const [sessionDate, setSessionDate] = useState(todayIso());
-  const [topic, setTopic] = useState("");
-  const [notes, setNotes] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
+  // Initial values: edit-mode pre-fills from the session; create-mode uses defaults.
+  const initial = isEdit
+    ? {
+        sessionDate: props.session.session_date,
+        topic: props.session.topic,
+        notes: props.session.notes ?? "",
+        acknowledged: props.session.acknowledged,
+      }
+    : {
+        sessionDate: todayIso(),
+        topic: "",
+        notes: "",
+        acknowledged: false,
+      };
+
+  const [sessionDate, setSessionDate] = useState(initial.sessionDate);
+  const [topic, setTopic] = useState(initial.topic);
+  const [notes, setNotes] = useState(initial.notes);
+  const [acknowledged, setAcknowledged] = useState(initial.acknowledged);
 
   function reset() {
-    setSessionDate(todayIso());
-    setTopic("");
-    setNotes("");
-    setAcknowledged(false);
+    setSessionDate(initial.sessionDate);
+    setTopic(initial.topic);
+    setNotes(initial.notes);
+    setAcknowledged(initial.acknowledged);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -49,20 +85,31 @@ export function LogSessionDialog({ driverId, driverName }: Props) {
       toast.error("Topic is required.");
       return;
     }
+
     startTransition(async () => {
-      const res = await createCoachingSession({
-        driver_id: driverId,
-        session_date: sessionDate,
-        topic: topic.trim(),
-        notes: notes.trim() || null,
-        acknowledged,
-      });
+      const res = isEdit
+        ? await updateCoachingSession({
+            session_id: props.session.id,
+            driver_id: props.driverId,
+            session_date: sessionDate,
+            topic: topic.trim(),
+            notes: notes.trim() || null,
+          })
+        : await createCoachingSession({
+            driver_id: props.driverId,
+            session_date: sessionDate,
+            topic: topic.trim(),
+            notes: notes.trim() || null,
+            acknowledged,
+          });
+
       if (!res.ok) {
-        toast.error(res.error || "Could not log session.");
+        toast.error(res.error || "Could not save.");
         return;
       }
-      toast.success("Session logged.");
-      reset();
+
+      toast.success(isEdit ? "Session updated." : "Session logged.");
+      if (!isEdit) reset();
       setOpen(false);
       router.refresh();
     });
@@ -77,17 +124,33 @@ export function LogSessionDialog({ driverId, driverName }: Props) {
       }}
     >
       <DialogTrigger
-        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          isEdit
+            ? "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            : "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90",
+        )}
       >
-        <MessageSquarePlus className="h-4 w-4" />
-        Log new session
+        {isEdit ? (
+          <>
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </>
+        ) : (
+          <>
+            <MessageSquarePlus className="h-4 w-4" />
+            Log new session
+          </>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Log coaching session</DialogTitle>
+          <DialogTitle>
+            {isEdit ? "Edit coaching session" : "Log coaching session"}
+          </DialogTitle>
           <DialogDescription>
-            For {driverName}. Sessions are immutable once saved — edits create
-            an audit revision.
+            {isEdit
+              ? `For ${props.driverName}. Edits are admin-only and create an audit revision.`
+              : `For ${props.driverName}. Sessions are immutable once saved — admin-only edits create an audit revision.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,20 +190,22 @@ export function LogSessionDialog({ driverId, driverName }: Props) {
             />
           </div>
 
-          <label className="flex items-start gap-2 text-sm cursor-pointer">
-            <Checkbox
-              checked={acknowledged}
-              onCheckedChange={(v) => setAcknowledged(Boolean(v))}
-              className="mt-0.5"
-            />
-            <div>
-              <div>Driver acknowledged</div>
-              <div className="text-xs text-muted-foreground">
-                Check if the driver confirmed understanding during the
-                session. Can be flipped later from the session card.
+          {!isEdit && (
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={acknowledged}
+                onCheckedChange={(v) => setAcknowledged(Boolean(v))}
+                className="mt-0.5"
+              />
+              <div>
+                <div>Driver acknowledged</div>
+                <div className="text-xs text-muted-foreground">
+                  Check if the driver confirmed understanding during the
+                  session. Can be flipped later from the session card.
+                </div>
               </div>
-            </div>
-          </label>
+            </label>
+          )}
 
           <DialogFooter>
             <Button
@@ -152,7 +217,11 @@ export function LogSessionDialog({ driverId, driverName }: Props) {
               Cancel
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save session"}
+              {pending
+                ? "Saving..."
+                : isEdit
+                  ? "Save changes"
+                  : "Save session"}
             </Button>
           </DialogFooter>
         </form>

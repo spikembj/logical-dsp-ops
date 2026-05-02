@@ -3,54 +3,94 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Circle } from "lucide-react";
-import { acknowledgeCoachingSession } from "@/app/actions/coaching";
+import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
+import {
+  setCoachingAcknowledged,
+  unvoidCoachingSession,
+} from "@/app/actions/coaching";
 import { formatSessionDate, relativeFromNow } from "@/lib/format/dates";
 import type { CoachingSessionListItem } from "@/lib/queries/coaching";
+import { LogSessionDialog } from "./log-session-dialog";
+import { VoidSessionDialog } from "./void-session-dialog";
+import { cn } from "@/lib/utils";
 
-export function SessionCard({
-  session,
-}: {
+interface Props {
   session: CoachingSessionListItem;
-}) {
+  driverName: string;
+  isAdmin: boolean;
+}
+
+export function SessionCard({ session, driverName, isAdmin }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-
-  function handleAcknowledge() {
-    startTransition(async () => {
-      const res = await acknowledgeCoachingSession({
-        session_id: session.id,
-        driver_id: session.driver_id,
-      });
-      if (!res.ok) {
-        toast.error(res.error || "Could not update.");
-        return;
-      }
-      toast.success("Marked as acknowledged.");
-      router.refresh();
-    });
-  }
+  const isVoided = !!session.voided_at;
 
   const coachLabel =
     session.coached_by?.full_name?.trim() ||
     session.coached_by?.email ||
     "Unknown coach";
+  const voiderLabel =
+    session.voided_by?.full_name?.trim() ||
+    session.voided_by?.email ||
+    "an admin";
   const wasEdited =
+    !isVoided &&
     new Date(session.updated_at).getTime() -
       new Date(session.created_at).getTime() >
-    1000;
+      1000;
+
+  function handleAcknowledge(next: boolean) {
+    startTransition(async () => {
+      const res = await setCoachingAcknowledged({
+        session_id: session.id,
+        driver_id: session.driver_id,
+        acknowledged: next,
+      });
+      if (!res.ok) {
+        toast.error(res.error || "Could not update.");
+        return;
+      }
+      toast.success(next ? "Marked as acknowledged." : "Acknowledgment cleared.");
+      router.refresh();
+    });
+  }
+
+  function handleUnvoid() {
+    startTransition(async () => {
+      const res = await unvoidCoachingSession({
+        session_id: session.id,
+        driver_id: session.driver_id,
+      });
+      if (!res.ok) {
+        toast.error(res.error || "Could not unvoid.");
+        return;
+      }
+      toast.success("Session restored.");
+      router.refresh();
+    });
+  }
 
   return (
-    <article className="rounded-xl border bg-card text-card-foreground shadow-sm">
+    <article
+      className={cn(
+        "rounded-xl border bg-card text-card-foreground shadow-sm transition-opacity",
+        isVoided && "opacity-60",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2.5 text-xs text-muted-foreground">
         <time
           dateTime={session.session_date}
-          className="font-medium text-foreground"
+          className={cn(
+            "font-medium text-foreground",
+            isVoided && "line-through",
+          )}
         >
           {formatSessionDate(session.session_date)}
         </time>
         <span aria-hidden>·</span>
-        <span>Coached by {coachLabel}</span>
+        <span className={cn(isVoided && "line-through")}>
+          Coached by {coachLabel}
+        </span>
         <span aria-hidden>·</span>
         <span title={new Date(session.created_at).toLocaleString()}>
           Logged {relativeFromNow(session.created_at)}
@@ -67,37 +107,54 @@ export function SessionCard({
           </>
         )}
 
-        <span className="ml-auto flex items-center gap-1">
-          {session.acknowledged ? (
-            <span
-              className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"
-              title={
-                session.acknowledged_at
-                  ? `Acknowledged ${new Date(session.acknowledged_at).toLocaleString()}`
-                  : undefined
-              }
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Acknowledged
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={handleAcknowledge}
-              disabled={pending}
-              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              <Circle className="h-3.5 w-3.5" />
-              {pending ? "Saving..." : "Mark acknowledged"}
-            </button>
-          )}
-        </span>
+        {!isVoided && (
+          <span className="ml-auto flex items-center gap-1">
+            {session.acknowledged ? (
+              <button
+                type="button"
+                onClick={() => handleAcknowledge(false)}
+                disabled={pending}
+                className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 hover:opacity-70 disabled:opacity-50"
+                title={
+                  session.acknowledged_at
+                    ? `Acknowledged ${new Date(session.acknowledged_at).toLocaleString()} — click to clear`
+                    : "Click to clear acknowledgment"
+                }
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Acknowledged
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleAcknowledge(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <Circle className="h-3.5 w-3.5" />
+                {pending ? "Saving..." : "Mark acknowledged"}
+              </button>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="px-4 py-3 space-y-2">
-        <h3 className="text-sm font-medium">{session.topic}</h3>
+        <h3
+          className={cn(
+            "text-sm font-medium",
+            isVoided && "line-through",
+          )}
+        >
+          {session.topic}
+        </h3>
         {session.notes ? (
-          <p className="text-sm text-foreground/80 whitespace-pre-line">
+          <p
+            className={cn(
+              "text-sm text-foreground/80 whitespace-pre-line",
+              isVoided && "line-through",
+            )}
+          >
             {session.notes}
           </p>
         ) : (
@@ -106,6 +163,62 @@ export function SessionCard({
           </p>
         )}
       </div>
+
+      {isVoided && (
+        <div className="border-t px-4 py-2 text-xs">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium text-destructive">Voided</span>
+            <span className="text-muted-foreground">
+              by {voiderLabel}
+              {session.voided_at &&
+                ` · ${formatSessionDate(session.voided_at)}`}
+            </span>
+          </div>
+          {session.void_reason && (
+            <p className="mt-1 text-muted-foreground">
+              <span className="font-medium">Reason:</span> {session.void_reason}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Footer: action affordances. Only render when there are actions. */}
+      {(isAdmin || (!isVoided && false)) && (
+        <div className="flex items-center justify-end gap-3 border-t px-4 py-2 bg-muted/30">
+          {isAdmin && !isVoided && (
+            <LogSessionDialog
+              mode="edit"
+              driverId={session.driver_id}
+              driverName={driverName}
+              session={{
+                id: session.id,
+                session_date: session.session_date,
+                topic: session.topic,
+                notes: session.notes,
+                acknowledged: session.acknowledged,
+              }}
+            />
+          )}
+          {isAdmin && !isVoided && (
+            <VoidSessionDialog
+              sessionId={session.id}
+              driverId={session.driver_id}
+              topic={session.topic}
+            />
+          )}
+          {isAdmin && isVoided && (
+            <button
+              type="button"
+              onClick={handleUnvoid}
+              disabled={pending}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              {pending ? "Restoring..." : "Restore (unvoid)"}
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }

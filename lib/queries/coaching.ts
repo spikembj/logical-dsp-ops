@@ -2,8 +2,14 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
+interface UserMini {
+  id: string;
+  full_name: string | null;
+  email: string;
+}
+
 /**
- * A single coaching session with the coach's display info joined in.
+ * A single coaching session with the coach + voider display info joined in.
  * Hand-typed for now; once we regenerate types from the live schema,
  * we can drop this and use the generated types directly.
  */
@@ -17,13 +23,13 @@ export interface CoachingSessionListItem {
   acknowledged_at: string | null;
   linked_scorecard_id: string | null;
   linked_event_ids: string[];
+  voided_at: string | null;
+  voided_by_id: string | null;
+  void_reason: string | null;
   created_at: string;
   updated_at: string;
-  coached_by: {
-    id: string;
-    full_name: string | null;
-    email: string;
-  } | null;
+  coached_by: UserMini | null;
+  voided_by: UserMini | null;
 }
 
 /**
@@ -43,8 +49,13 @@ export const listSessionsForDriver = cache(
         id, driver_id, session_date, topic, notes,
         acknowledged, acknowledged_at,
         linked_scorecard_id, linked_event_ids,
+        voided_at, void_reason,
+        voided_by_id:voided_by,
         created_at, updated_at,
         coached_by:users!coaching_sessions_coached_by_fkey (
+          id, full_name, email
+        ),
+        voided_by:users!coaching_sessions_voided_by_fkey (
           id, full_name, email
         )
       `,
@@ -58,13 +69,16 @@ export const listSessionsForDriver = cache(
       return [];
     }
 
-    // Supabase types the joined relation as an array by default; we know it's
-    // a single row because coached_by is a non-nullable scalar FK.
+    const flatten = (v: unknown): UserMini | null => {
+      if (!v) return null;
+      if (Array.isArray(v)) return (v[0] as UserMini) ?? null;
+      return v as UserMini;
+    };
+
     return (data ?? []).map((r) => ({
       ...r,
-      coached_by: Array.isArray(r.coached_by)
-        ? (r.coached_by[0] ?? null)
-        : r.coached_by,
+      coached_by: flatten(r.coached_by),
+      voided_by: flatten(r.voided_by),
     })) as CoachingSessionListItem[];
   },
 );
