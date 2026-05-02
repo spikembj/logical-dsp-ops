@@ -35,7 +35,7 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
       if (!q) return true;
       return (
         d.full_name.toLowerCase().includes(q) ||
-        d.transporter_id.toLowerCase().includes(q)
+        (d.transporter_id?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [drivers, query, statusFilter]);
@@ -118,7 +118,9 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
                     </Link>
                   </TableCell>
                   <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
-                    {d.transporter_id.slice(0, 14)}…
+                    {d.transporter_id
+                      ? `${d.transporter_id.slice(0, 14)}…`
+                      : "—"}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={d.status} />

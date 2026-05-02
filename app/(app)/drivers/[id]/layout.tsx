@@ -39,7 +39,9 @@ export default async function DriverLayout({ params, children }: Props) {
           </span>
         </div>
         <div className="font-mono text-xs text-muted-foreground break-all">
-          {driver.transporter_id}
+          {driver.transporter_id ?? (
+            <span className="italic">No transporter ID yet</span>
+          )}
         </div>
       </header>
 

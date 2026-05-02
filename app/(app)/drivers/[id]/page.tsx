@@ -21,9 +21,13 @@ export default async function DriverProfilePage({ params }: Props) {
     { label: "Full name", value: driver.full_name },
     {
       label: "Transporter ID",
-      value: (
+      value: driver.transporter_id ? (
         <span className="font-mono text-xs break-all">
           {driver.transporter_id}
+        </span>
+      ) : (
+        <span className="text-muted-foreground italic">
+          Not set — populated by next scorecard import
         </span>
       ),
     },

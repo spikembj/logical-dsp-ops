@@ -29,7 +29,11 @@ export interface UserRow {
 
 export interface DriverRow {
   id: string;
-  transporter_id: string;
+  /**
+   * Amazon's short transporter ID (A-prefixed). Nullable: a driver may exist
+   * before they ever appear in a scorecard import that gives us the ID.
+   */
+  transporter_id: string | null;
   full_name: string;
   hire_date: string | null;
   status: DriverStatus;
