@@ -1,9 +1,102 @@
-export default function DriverPerformancePage() {
+import { notFound } from "next/navigation";
+import { getDriverById } from "@/lib/queries/drivers";
+import { listScorecardsForDriver } from "@/lib/queries/scorecards";
+import { formatSessionDate } from "@/lib/format/dates";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+export default async function DriverPerformancePage({ params }: Props) {
+  const { id } = await params;
+  const driver = await getDriverById(id);
+  if (!driver) notFound();
+  const scorecards = await listScorecardsForDriver(id);
+
+  if (scorecards.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          No scorecards yet for {driver.full_name}.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Upload a weekly scorecard PDF on the{" "}
+          <a href="/import" className="underline-offset-4 hover:underline">
+            Import
+          </a>{" "}
+          page.
+        </p>
+      </div>
+    );
+  }
+
+  const fmt = (n: number | null, suffix = "") =>
+    n === null ? <span className="text-muted-foreground">—</span> : `${n}${suffix}`;
+
   return (
-    <div className="rounded-md border p-6 text-sm text-muted-foreground">
-      Trend chart and weekly scorecard table ship in build order step&nbsp;4
-      (scorecard import). Until then, no performance data exists for any
-      driver.
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        {scorecards.length} {scorecards.length === 1 ? "week" : "weeks"} on
+        record. Recharts trend line ships in build order step&nbsp;8.
+      </p>
+      <div className="rounded-md border overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Week ending</TableHead>
+              <TableHead className="text-right">DCR</TableHead>
+              <TableHead className="text-right">FICO</TableHead>
+              <TableHead className="text-right">Seatbelt off</TableHead>
+              <TableHead className="text-right">Speeding</TableHead>
+              <TableHead className="text-right">Distractions</TableHead>
+              <TableHead className="text-right">Following dist.</TableHead>
+              <TableHead className="text-right">Sign/signal</TableHead>
+              <TableHead className="text-right">CDF DPMO</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {scorecards.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="font-medium">
+                  {formatSessionDate(s.week_ending)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.dcr, "%")}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.fico_score)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.seatbelt_off_rate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.speeding_event_rate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.distractions_rate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.following_distance_rate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.sign_signal_violations_rate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.cdf)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -25,3 +25,23 @@ export function relativeFromNow(iso: string): string {
 export function todayIso(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
+
+/**
+ * Compute the week_ending date for an Amazon DSP scorecard.
+ *
+ * Amazon DSPs treat weeks as Sunday-through-Saturday. Week 1 of any year
+ * begins on the first Sunday >= January 1 of that year (or Jan 1 itself
+ * if Jan 1 is a Sunday). Week N ends on (Week 1 start + (N-1)*7 + 6) days.
+ *
+ * Returns ISO date string YYYY-MM-DD.
+ */
+export function amazonWeekEnding(week: number, year: number): string {
+  if (week < 1 || week > 53) throw new Error(`Invalid week: ${week}`);
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const offsetToSunday = (7 - jan1.getUTCDay()) % 7;
+  const week1Start = new Date(Date.UTC(year, 0, 1 + offsetToSunday));
+  const weekNEnd = new Date(
+    week1Start.getTime() + ((week - 1) * 7 + 6) * 86_400_000,
+  );
+  return weekNEnd.toISOString().slice(0, 10);
+}
