@@ -7,10 +7,17 @@ export interface ScorecardRow {
   driver_id: string;
   week_ending: string; // YYYY-MM-DD
   tier: string | null;
+  delivered: number | null;
   fico_score: number | null;
   dcr: number | null;
   delivery_completion_rate: number | null;
   cdf: number | null;
+  ced: number | null;
+  dsb: number | null;
+  pod: number | null;
+  psb: number | null;
+  dsb_count: number | null;
+  pod_opps: number | null;
   seatbelt_off_rate: number | null;
   speeding_event_rate: number | null;
   distractions_rate: number | null;
@@ -31,8 +38,9 @@ export const listScorecardsForDriver = cache(
       .from("scorecards")
       .select(
         `
-        id, driver_id, week_ending, tier, fico_score, dcr,
-        delivery_completion_rate, cdf,
+        id, driver_id, week_ending, tier,
+        delivered, fico_score, dcr, delivery_completion_rate,
+        cdf, ced, dsb, pod, psb, dsb_count, pod_opps,
         seatbelt_off_rate, speeding_event_rate, distractions_rate,
         following_distance_rate, sign_signal_violations_rate,
         raw_data, imported_from, created_at

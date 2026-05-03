@@ -110,13 +110,20 @@ export async function importScorecardPdf(
   let createdDrivers = 0;
   let matched = 0;
   const errors: ImportSummary["errors"] = [];
-  const scorecardRows: Array<{
+  type ScorecardInsert = {
     driver_id: string;
     week_ending: string;
+    delivered: number | null;
     fico_score: number | null;
     dcr: number | null;
     delivery_completion_rate: number | null;
     cdf: number | null;
+    ced: number | null;
+    dsb: number | null;
+    pod: number | null;
+    psb: number | null;
+    dsb_count: number | null;
+    pod_opps: number | null;
     seatbelt_off_rate: number | null;
     speeding_event_rate: number | null;
     distractions_rate: number | null;
@@ -124,7 +131,10 @@ export async function importScorecardPdf(
     sign_signal_violations_rate: number | null;
     raw_data: ParsedScorecardDriver;
     imported_from: string;
-  }> = [];
+  };
+  // Deduped by (driver_id, week_ending) — Postgres' ON CONFLICT can't handle
+  // two rows targeting the same conflict in a single INSERT. Last write wins.
+  const byKey = new Map<string, ScorecardInsert>();
 
   for (const d of parsed.drivers) {
     let driverId: string | undefined =
@@ -174,13 +184,21 @@ export async function importScorecardPdf(
       createdDrivers++;
     }
 
-    scorecardRows.push({
+    const key = `${driverId}::${parsed.week_ending}`;
+    byKey.set(key, {
       driver_id: driverId!,
       week_ending: parsed.week_ending,
+      delivered: d.delivered,
       fico_score: d.fico_score,
       dcr: d.dcr,
       delivery_completion_rate: d.dcr, // same value, both columns kept per spec
       cdf: d.cdf_dpmo,
+      ced: d.ced,
+      dsb: d.dsb,
+      pod: d.pod,
+      psb: d.psb,
+      dsb_count: d.dsb_count,
+      pod_opps: d.pod_opps,
       seatbelt_off_rate: d.seatbelt_off_rate,
       speeding_event_rate: d.speeding_event_rate,
       distractions_rate: d.distractions_rate,
@@ -190,6 +208,8 @@ export async function importScorecardPdf(
       imported_from: fileImportId,
     });
   }
+
+  const scorecardRows = [...byKey.values()];
 
   // 5. Upsert scorecards. The (driver_id, week_ending) unique constraint
   //    means re-imports of the same week overwrite the prior rows.

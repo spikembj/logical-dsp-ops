@@ -38,21 +38,30 @@ export default async function DriverPerformancePage({ params }: Props) {
     );
   }
 
-  const fmt = (n: number | null, suffix = "") =>
-    n === null ? <span className="text-muted-foreground">—</span> : `${n}${suffix}`;
+  const fmt = (n: number | null | undefined, suffix = "") =>
+    n === null || n === undefined ? (
+      <span className="text-muted-foreground">—</span>
+    ) : (
+      `${n}${suffix}`
+    );
 
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         {scorecards.length} {scorecards.length === 1 ? "week" : "weeks"} on
-        record. Recharts trend line ships in build order step&nbsp;8.
+        record. Scroll horizontally for all metrics. Trend chart ships in
+        build order step&nbsp;8.
       </p>
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Week ending</TableHead>
+              <TableHead className="sticky left-0 bg-card z-10">
+                Week ending
+              </TableHead>
+              <TableHead className="text-right">Delivered</TableHead>
               <TableHead className="text-right">DCR</TableHead>
+              <TableHead className="text-right">POD</TableHead>
               <TableHead className="text-right">FICO</TableHead>
               <TableHead className="text-right">Seatbelt off</TableHead>
               <TableHead className="text-right">Speeding</TableHead>
@@ -60,16 +69,27 @@ export default async function DriverPerformancePage({ params }: Props) {
               <TableHead className="text-right">Following dist.</TableHead>
               <TableHead className="text-right">Sign/signal</TableHead>
               <TableHead className="text-right">CDF DPMO</TableHead>
+              <TableHead className="text-right">CED</TableHead>
+              <TableHead className="text-right">DSB</TableHead>
+              <TableHead className="text-right">DSB count</TableHead>
+              <TableHead className="text-right">POD opps</TableHead>
+              <TableHead className="text-right">PSB</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {scorecards.map((s) => (
               <TableRow key={s.id}>
-                <TableCell className="font-medium">
+                <TableCell className="sticky left-0 bg-card font-medium z-10">
                   {formatSessionDate(s.week_ending)}
                 </TableCell>
                 <TableCell className="text-right">
+                  {fmt(s.delivered)}
+                </TableCell>
+                <TableCell className="text-right">
                   {fmt(s.dcr, "%")}
+                </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.pod, "%")}
                 </TableCell>
                 <TableCell className="text-right">
                   {fmt(s.fico_score)}
@@ -89,9 +109,16 @@ export default async function DriverPerformancePage({ params }: Props) {
                 <TableCell className="text-right">
                   {fmt(s.sign_signal_violations_rate)}
                 </TableCell>
+                <TableCell className="text-right">{fmt(s.cdf)}</TableCell>
+                <TableCell className="text-right">{fmt(s.ced)}</TableCell>
+                <TableCell className="text-right">{fmt(s.dsb)}</TableCell>
                 <TableCell className="text-right">
-                  {fmt(s.cdf)}
+                  {fmt(s.dsb_count)}
                 </TableCell>
+                <TableCell className="text-right">
+                  {fmt(s.pod_opps)}
+                </TableCell>
+                <TableCell className="text-right">{fmt(s.psb)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
