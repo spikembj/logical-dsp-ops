@@ -48,6 +48,9 @@ export default async function DriverPerformancePage({ params }: Props) {
       `${n}${suffix}`
     );
 
+  // Column order mirrors the scorecard PDF layout. Two visual groups —
+  // Safety and Delivery Quality — separated by a thin left border on the
+  // first column of each group.
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
@@ -58,21 +61,49 @@ export default async function DriverPerformancePage({ params }: Props) {
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
+            {/* Group labels row */}
             <TableRow>
-              <TableHead className="sticky left-0 bg-card z-10">Week</TableHead>
-              <TableHead className="text-right">Delivered</TableHead>
-              <TableHead className="text-right">DCR</TableHead>
-              <TableHead className="text-right">POD</TableHead>
-              <TableHead className="text-right">FICO</TableHead>
+              <TableHead
+                rowSpan={2}
+                className="sticky left-0 bg-card z-10 align-bottom"
+              >
+                Week
+              </TableHead>
+              <TableHead
+                rowSpan={2}
+                className="text-right align-bottom"
+              >
+                Delivered
+              </TableHead>
+              <TableHead
+                colSpan={6}
+                className="text-center border-l text-[10px] uppercase tracking-wider text-muted-foreground font-normal"
+              >
+                Safety
+              </TableHead>
+              <TableHead
+                colSpan={8}
+                className="text-center border-l text-[10px] uppercase tracking-wider text-muted-foreground font-normal"
+              >
+                Delivery Quality
+              </TableHead>
+            </TableRow>
+            {/* Per-metric column headers */}
+            <TableRow>
+              {/* Safety */}
+              <TableHead className="text-right border-l">FICO</TableHead>
               <TableHead className="text-right">Seatbelt off</TableHead>
               <TableHead className="text-right">Speeding</TableHead>
               <TableHead className="text-right">Distractions</TableHead>
               <TableHead className="text-right">Following dist.</TableHead>
               <TableHead className="text-right">Sign/signal</TableHead>
-              <TableHead className="text-right">CDF DPMO</TableHead>
+              {/* Delivery Quality */}
+              <TableHead className="text-right border-l">CDF DPMO</TableHead>
               <TableHead className="text-right">CED</TableHead>
+              <TableHead className="text-right">DCR</TableHead>
               <TableHead className="text-right">DSB</TableHead>
               <TableHead className="text-right">DSB count</TableHead>
+              <TableHead className="text-right">POD</TableHead>
               <TableHead className="text-right">POD opps</TableHead>
               <TableHead className="text-right">PSB</TableHead>
             </TableRow>
@@ -81,51 +112,55 @@ export default async function DriverPerformancePage({ params }: Props) {
             {scorecards.map((s) => {
               const { week, year } = amazonWeekFromEndingDate(s.week_ending);
               return (
-              <TableRow key={s.id}>
-                <TableCell
-                  className="sticky left-0 bg-card font-medium z-10"
-                  title={`Week ending ${formatSessionDate(s.week_ending)}`}
-                >
-                  {week}, {year}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.delivered)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.dcr, "%")}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.pod, "%")}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.fico_score)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.seatbelt_off_rate)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.speeding_event_rate)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.distractions_rate)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.following_distance_rate)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.sign_signal_violations_rate)}
-                </TableCell>
-                <TableCell className="text-right">{fmt(s.cdf)}</TableCell>
-                <TableCell className="text-right">{fmt(s.ced)}</TableCell>
-                <TableCell className="text-right">{fmt(s.dsb)}</TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.dsb_count)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {fmt(s.pod_opps)}
-                </TableCell>
-                <TableCell className="text-right">{fmt(s.psb)}</TableCell>
-              </TableRow>
+                <TableRow key={s.id}>
+                  <TableCell
+                    className="sticky left-0 bg-card font-medium z-10"
+                    title={`Week ending ${formatSessionDate(s.week_ending)}`}
+                  >
+                    {week}, {year}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.delivered)}
+                  </TableCell>
+                  {/* Safety */}
+                  <TableCell className="text-right border-l">
+                    {fmt(s.fico_score)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.seatbelt_off_rate)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.speeding_event_rate)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.distractions_rate)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.following_distance_rate)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.sign_signal_violations_rate)}
+                  </TableCell>
+                  {/* Delivery Quality */}
+                  <TableCell className="text-right border-l">
+                    {fmt(s.cdf)}
+                  </TableCell>
+                  <TableCell className="text-right">{fmt(s.ced)}</TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.dcr, "%")}
+                  </TableCell>
+                  <TableCell className="text-right">{fmt(s.dsb)}</TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.dsb_count)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.pod, "%")}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {fmt(s.pod_opps)}
+                  </TableCell>
+                  <TableCell className="text-right">{fmt(s.psb)}</TableCell>
+                </TableRow>
               );
             })}
           </TableBody>
