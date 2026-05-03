@@ -45,3 +45,26 @@ export function amazonWeekEnding(week: number, year: number): string {
   );
   return weekNEnd.toISOString().slice(0, 10);
 }
+
+/**
+ * Inverse of amazonWeekEnding — given a week_ending Saturday in YYYY-MM-DD,
+ * return the Amazon DSP week number and the year that week belongs to.
+ *
+ * The "year" is the year that owns the week's Sunday start, which can differ
+ * from the year of week_ending itself for Week 53 spanning a year boundary.
+ */
+export function amazonWeekFromEndingDate(weekEndingIso: string): {
+  week: number;
+  year: number;
+} {
+  const ending = new Date(`${weekEndingIso}T00:00:00Z`);
+  const sunday = new Date(ending.getTime() - 6 * 86_400_000);
+  const year = sunday.getUTCFullYear();
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  const offsetToSunday = (7 - jan1.getUTCDay()) % 7;
+  const week1Start = new Date(Date.UTC(year, 0, 1 + offsetToSunday));
+  const week =
+    Math.floor((sunday.getTime() - week1Start.getTime()) / (7 * 86_400_000)) +
+    1;
+  return { week, year };
+}

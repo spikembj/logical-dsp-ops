@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import { getDriverById } from "@/lib/queries/drivers";
 import { listScorecardsForDriver } from "@/lib/queries/scorecards";
-import { formatSessionDate } from "@/lib/format/dates";
+import {
+  amazonWeekFromEndingDate,
+  formatSessionDate,
+} from "@/lib/format/dates";
 import {
   Table,
   TableBody,
@@ -56,9 +59,7 @@ export default async function DriverPerformancePage({ params }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="sticky left-0 bg-card z-10">
-                Week ending
-              </TableHead>
+              <TableHead className="sticky left-0 bg-card z-10">Week</TableHead>
               <TableHead className="text-right">Delivered</TableHead>
               <TableHead className="text-right">DCR</TableHead>
               <TableHead className="text-right">POD</TableHead>
@@ -77,10 +78,15 @@ export default async function DriverPerformancePage({ params }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {scorecards.map((s) => (
+            {scorecards.map((s) => {
+              const { week, year } = amazonWeekFromEndingDate(s.week_ending);
+              return (
               <TableRow key={s.id}>
-                <TableCell className="sticky left-0 bg-card font-medium z-10">
-                  {formatSessionDate(s.week_ending)}
+                <TableCell
+                  className="sticky left-0 bg-card font-medium z-10"
+                  title={`Week ending ${formatSessionDate(s.week_ending)}`}
+                >
+                  Week {week}, {year}
                 </TableCell>
                 <TableCell className="text-right">
                   {fmt(s.delivered)}
@@ -120,7 +126,8 @@ export default async function DriverPerformancePage({ params }: Props) {
                 </TableCell>
                 <TableCell className="text-right">{fmt(s.psb)}</TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
