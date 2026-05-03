@@ -12,11 +12,26 @@
  */
 
 export type UserRole = "admin" | "manager" | "dispatcher";
-export type DriverStatus = "active" | "loa" | "terminated";
+export type DriverStatus = "active" | "loa" | "terminated" | "inactive";
 export type VehicleType = "cdv" | "edv" | "step_van" | "rivian";
-export type Tier = "fantastic_plus" | "fantastic" | "great" | "fair" | "poor";
+export type Tier =
+  | "fantastic_plus"
+  | "fantastic"
+  | "great"
+  | "fair"
+  | "poor"
+  | "platinum"
+  | "gold"
+  | "silver"
+  | "bronze";
 export type Severity = "impacting" | "non_impacting";
 export type ImportType = "scorecard" | "netradyne";
+export type CoachingSessionType =
+  | "discussion"
+  | "verbal_warning"
+  | "write_up"
+  | "final_warning"
+  | "termination";
 
 export interface UserRow {
   id: string;
@@ -68,6 +83,7 @@ export interface Database {
       tier: Tier;
       severity: Severity;
       import_type: ImportType;
+      coaching_session_type: CoachingSessionType;
     };
   };
 }

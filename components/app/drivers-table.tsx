@@ -19,6 +19,7 @@ const STATUS_FILTERS: { label: string; value: DriverStatus | "all" }[] = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
   { label: "LOA", value: "loa" },
+  { label: "Inactive", value: "inactive" },
   { label: "Terminated", value: "terminated" },
 ];
 

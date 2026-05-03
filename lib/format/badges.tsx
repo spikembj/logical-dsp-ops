@@ -12,6 +12,10 @@ const TIER_LABEL: Record<Tier, string> = {
   great: "Great",
   fair: "Fair",
   poor: "Poor",
+  platinum: "Platinum",
+  gold: "Gold",
+  silver: "Silver",
+  bronze: "Bronze",
 };
 
 const TIER_CLASS: Record<Tier, string> = {
@@ -20,6 +24,11 @@ const TIER_CLASS: Record<Tier, string> = {
   great: "bg-sky-500/15 text-sky-700 border-sky-500/30",
   fair: "bg-amber-500/15 text-amber-700 border-amber-500/30",
   poor: "bg-rose-500/15 text-rose-700 border-rose-500/30",
+  // Amazon's new tier system (DSP Overview Dashboard CSV).
+  platinum: "bg-emerald-600/15 text-emerald-700 border-emerald-600/30",
+  gold: "bg-amber-500/15 text-amber-700 border-amber-500/30",
+  silver: "bg-sky-500/15 text-sky-700 border-sky-500/30",
+  bronze: "bg-rose-500/15 text-rose-700 border-rose-500/30",
 };
 
 export function TierBadge({ tier }: { tier: Tier | null | undefined }) {
@@ -41,12 +50,14 @@ const STATUS_LABEL: Record<DriverStatus, string> = {
   active: "Active",
   loa: "LOA",
   terminated: "Terminated",
+  inactive: "Inactive",
 };
 
 const STATUS_CLASS: Record<DriverStatus, string> = {
   active: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30",
   loa: "bg-amber-500/10 text-amber-700 border-amber-500/30",
   terminated: "bg-zinc-500/10 text-zinc-600 border-zinc-500/30",
+  inactive: "bg-zinc-500/10 text-zinc-600 border-zinc-500/30",
 };
 
 export function StatusBadge({ status }: { status: DriverStatus }) {

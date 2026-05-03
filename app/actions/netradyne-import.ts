@@ -207,8 +207,12 @@ export async function importNetradyneCsv(
     })
     .eq("id", fileImportId);
 
+  // 8. Refresh driver active/inactive status.
+  await supabase.rpc("refresh_driver_active_status");
+
   revalidatePath("/import");
   revalidatePath("/drivers");
+  revalidatePath("/");
 
   return {
     ok: errors.length === 0 || writtenCount > 0,

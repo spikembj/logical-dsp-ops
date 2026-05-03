@@ -21,9 +21,18 @@ import { createClient } from "@/lib/supabase/server";
 
 const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
 
+const SessionType = z.enum([
+  "discussion",
+  "verbal_warning",
+  "write_up",
+  "final_warning",
+  "termination",
+]);
+
 const CreateSchema = z.object({
   driver_id: z.string().uuid(),
   session_date: Iso,
+  session_type: SessionType.default("discussion"),
   topic: z.string().trim().min(1, "Topic is required").max(200),
   notes: z.string().trim().max(10_000).optional().nullable(),
   acknowledged: z.boolean().default(false),
@@ -33,6 +42,7 @@ const UpdateSchema = z.object({
   session_id: z.string().uuid(),
   driver_id: z.string().uuid(),
   session_date: Iso,
+  session_type: SessionType,
   topic: z.string().trim().min(1, "Topic is required").max(200),
   notes: z.string().trim().max(10_000).optional().nullable(),
 });
@@ -73,12 +83,14 @@ export async function createCoachingSession(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const { driver_id, session_date, topic, notes, acknowledged } = parsed.data;
+  const { driver_id, session_date, session_type, topic, notes, acknowledged } =
+    parsed.data;
 
   const { error } = await supabase.from("coaching_sessions").insert({
     driver_id,
     coached_by: user.id,
     session_date,
+    session_type,
     topic,
     notes: notes || null,
     acknowledged,
@@ -105,11 +117,15 @@ export async function updateCoachingSession(
   if (!parsed.success) return fail(parsed.error.issues);
 
   const supabase = await createClient();
-  const { session_id, driver_id, session_date, topic, notes } = parsed.data;
+  const { session_id, driver_id, session_date, session_type, topic, notes } =
+    parsed.data;
 
   const { error, count } = await supabase
     .from("coaching_sessions")
-    .update({ session_date, topic, notes: notes || null }, { count: "exact" })
+    .update(
+      { session_date, session_type, topic, notes: notes || null },
+      { count: "exact" },
+    )
     .eq("id", session_id)
     .eq("driver_id", driver_id)
     .is("voided_at", null);

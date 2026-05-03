@@ -24,6 +24,15 @@ import {
 } from "@/app/actions/coaching";
 import { todayIso } from "@/lib/format/dates";
 import { cn } from "@/lib/utils";
+import type { CoachingSessionType } from "@/lib/types/database";
+
+const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
+  { value: "discussion", label: "Discussion" },
+  { value: "verbal_warning", label: "Verbal warning" },
+  { value: "write_up", label: "Write up" },
+  { value: "final_warning", label: "Final warning" },
+  { value: "termination", label: "Termination" },
+];
 
 type CreateProps = {
   mode?: "create";
@@ -38,6 +47,7 @@ type EditProps = {
   session: {
     id: string;
     session_date: string;
+    session_type: CoachingSessionType;
     topic: string;
     notes: string | null;
     acknowledged: boolean;
@@ -56,24 +66,30 @@ export function LogSessionDialog(props: Props) {
   const initial = isEdit
     ? {
         sessionDate: props.session.session_date,
+        sessionType: props.session.session_type,
         topic: props.session.topic,
         notes: props.session.notes ?? "",
         acknowledged: props.session.acknowledged,
       }
     : {
         sessionDate: todayIso(),
+        sessionType: "discussion" as CoachingSessionType,
         topic: "",
         notes: "",
         acknowledged: false,
       };
 
   const [sessionDate, setSessionDate] = useState(initial.sessionDate);
+  const [sessionType, setSessionType] = useState<CoachingSessionType>(
+    initial.sessionType,
+  );
   const [topic, setTopic] = useState(initial.topic);
   const [notes, setNotes] = useState(initial.notes);
   const [acknowledged, setAcknowledged] = useState(initial.acknowledged);
 
   function reset() {
     setSessionDate(initial.sessionDate);
+    setSessionType(initial.sessionType);
     setTopic(initial.topic);
     setNotes(initial.notes);
     setAcknowledged(initial.acknowledged);
@@ -92,12 +108,14 @@ export function LogSessionDialog(props: Props) {
             session_id: props.session.id,
             driver_id: props.driverId,
             session_date: sessionDate,
+            session_type: sessionType,
             topic: topic.trim(),
             notes: notes.trim() || null,
           })
         : await createCoachingSession({
             driver_id: props.driverId,
             session_date: sessionDate,
+            session_type: sessionType,
             topic: topic.trim(),
             notes: notes.trim() || null,
             acknowledged,
@@ -155,15 +173,34 @@ export function LogSessionDialog(props: Props) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="session_date">Date</Label>
-            <Input
-              id="session_date"
-              type="date"
-              required
-              value={sessionDate}
-              onChange={(e) => setSessionDate(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="session_date">Date</Label>
+              <Input
+                id="session_date"
+                type="date"
+                required
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="session_type">Type</Label>
+              <select
+                id="session_type"
+                value={sessionType}
+                onChange={(e) =>
+                  setSessionType(e.target.value as CoachingSessionType)
+                }
+                className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                {SESSION_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="space-y-2">

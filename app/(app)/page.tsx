@@ -1,6 +1,9 @@
 import { requireUser } from "@/lib/auth/require-role";
 import { getDashboardData } from "@/lib/queries/dashboard";
-import { formatSessionDate } from "@/lib/format/dates";
+import {
+  amazonWeekFromEndingDate,
+  formatSessionDate,
+} from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
 import { RecentActivity } from "@/components/app/dashboard/recent-activity";
@@ -8,6 +11,7 @@ import { RecentActivity } from "@/components/app/dashboard/recent-activity";
 export default async function DashboardPage() {
   const me = await requireUser();
   const data = await getDashboardData();
+  const { week, year } = amazonWeekFromEndingDate(data.window.asOf);
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -15,7 +19,11 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Hi {me.full_name?.split(" ")[0] ?? me.email}. Week ending{" "}
+            Hi {me.full_name?.split(" ")[0] ?? me.email}.{" "}
+            <span className="text-foreground font-medium">
+              Week {week}, {year}
+            </span>{" "}
+            · ending{" "}
             <span className="text-foreground font-medium">
               {formatSessionDate(data.window.asOf)}
             </span>
@@ -29,11 +37,16 @@ export default async function DashboardPage() {
         <StatTile
           label="Active drivers"
           value={data.stats.activeDriverCount}
+          hint="last 60 days of activity"
         />
         <StatTile
-          label="Impacting events"
+          label="Safety events"
           value={data.stats.impactingEventTotal}
-          hint={`${data.stats.impactingEventRowCount} rows · 7 days`}
+          secondary={{
+            label: "non-impacting",
+            value: data.stats.nonImpactingEventTotal,
+          }}
+          hint="impacting · 7-day window"
           accent={data.stats.impactingEventTotal > 0 ? "warn" : "default"}
         />
         <StatTile
@@ -43,22 +56,27 @@ export default async function DashboardPage() {
         />
         <StatTile
           label="Needs coaching"
-          value={data.stats.needsCoachingCount}
-          hint="impacting events, no session"
-          accent={data.stats.needsCoachingCount > 0 ? "warn" : "good"}
+          value={data.stats.needsSafetyCount}
+          secondary={{
+            label: "quality",
+            value: data.stats.needsQualityCount,
+          }}
+          hint="safety · quality"
+          accent={
+            data.stats.needsSafetyCount + data.stats.needsQualityCount > 0
+              ? "warn"
+              : "good"
+          }
         />
       </section>
 
       {/* Two-column body: hero list + recent activity */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-medium">Needs coaching this week</h2>
-            <p className="text-xs text-muted-foreground">
-              Impacting events, no session yet
-            </p>
-          </div>
-          <NeedsCoachingList drivers={data.needsCoaching} />
+        <div className="lg:col-span-2">
+          <NeedsCoachingList
+            safety={data.needsCoachingSafety}
+            quality={data.needsCoachingQuality}
+          />
         </div>
 
         <div className="space-y-2">
@@ -71,8 +89,11 @@ export default async function DashboardPage() {
       </section>
 
       <p className="text-xs text-muted-foreground">
-        Tier-based tiles (count by tier, trending down) ship in step&nbsp;6.5
-        once the per-driver tier lands via the DSP Overview Dashboard CSV.
+        Quality coaching uses thresholds: DCR&nbsp;&lt;&nbsp;99% ·
+        POD&nbsp;&lt;&nbsp;99% · CDF&nbsp;DPMO&nbsp;&gt;&nbsp;800 ·
+        any&nbsp;CED · DSB&nbsp;&lt;&nbsp;233 · PSB&nbsp;&gt;&nbsp;10%.
+        Per-driver tier (Platinum/Gold/Silver/Bronze) ships once the DSP
+        Overview Dashboard CSV import lands.
       </p>
     </div>
   );

@@ -12,7 +12,29 @@ import { formatSessionDate, relativeFromNow } from "@/lib/format/dates";
 import type { CoachingSessionListItem } from "@/lib/queries/coaching";
 import { LogSessionDialog } from "./log-session-dialog";
 import { VoidSessionDialog } from "./void-session-dialog";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { CoachingSessionType } from "@/lib/types/database";
+
+const TYPE_LABEL: Record<CoachingSessionType, string> = {
+  discussion: "Discussion",
+  verbal_warning: "Verbal warning",
+  write_up: "Write up",
+  final_warning: "Final warning",
+  termination: "Termination",
+};
+
+const TYPE_CLASS: Record<CoachingSessionType, string> = {
+  discussion: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-400",
+  verbal_warning:
+    "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400",
+  write_up:
+    "bg-orange-500/15 text-orange-700 border-orange-500/30 dark:text-orange-400",
+  final_warning:
+    "bg-rose-500/15 text-rose-700 border-rose-500/30 dark:text-rose-400",
+  termination:
+    "bg-zinc-700/15 text-zinc-800 border-zinc-700/30 dark:bg-zinc-300/10 dark:text-zinc-200 dark:border-zinc-300/20",
+};
 
 interface Props {
   session: CoachingSessionListItem;
@@ -140,14 +162,22 @@ export function SessionCard({ session, driverName, isAdmin }: Props) {
       </div>
 
       <div className="px-4 py-3 space-y-2">
-        <h3
-          className={cn(
-            "text-sm font-medium",
-            isVoided && "line-through",
-          )}
-        >
-          {session.topic}
-        </h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge
+            variant="outline"
+            className={cn(TYPE_CLASS[session.session_type], "text-[11px]")}
+          >
+            {TYPE_LABEL[session.session_type]}
+          </Badge>
+          <h3
+            className={cn(
+              "text-sm font-medium",
+              isVoided && "line-through",
+            )}
+          >
+            {session.topic}
+          </h3>
+        </div>
         {session.notes ? (
           <p
             className={cn(
@@ -193,6 +223,7 @@ export function SessionCard({ session, driverName, isAdmin }: Props) {
               session={{
                 id: session.id,
                 session_date: session.session_date,
+                session_type: session.session_type,
                 topic: session.topic,
                 notes: session.notes,
                 acknowledged: session.acknowledged,

@@ -237,8 +237,12 @@ export async function importScorecardPdf(
     })
     .eq("id", fileImportId);
 
+  // 7. Refresh driver active/inactive status based on the new data window.
+  await supabase.rpc("refresh_driver_active_status");
+
   revalidatePath("/drivers");
   revalidatePath("/import");
+  revalidatePath("/");
 
   return {
     ok: !scoreErr,
