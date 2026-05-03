@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScorecardUpload } from "@/components/app/import/scorecard-upload";
+import { NetradyneUpload } from "@/components/app/import/netradyne-upload";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
@@ -18,17 +19,13 @@ export default async function ImportPage() {
       <Tabs defaultValue="scorecard" className="w-full">
         <TabsList>
           <TabsTrigger value="scorecard">Scorecard (PDF)</TabsTrigger>
-          <TabsTrigger value="netradyne" disabled>
-            Netradyne (CSV) — step 5
-          </TabsTrigger>
+          <TabsTrigger value="netradyne">Netradyne (CSV)</TabsTrigger>
         </TabsList>
         <TabsContent value="scorecard" className="mt-4">
           <ScorecardUpload />
         </TabsContent>
         <TabsContent value="netradyne" className="mt-4">
-          <div className="rounded-md border p-6 text-sm text-muted-foreground">
-            Netradyne CSV import ships in build order step&nbsp;5.
-          </div>
+          <NetradyneUpload />
         </TabsContent>
       </Tabs>
     </div>
