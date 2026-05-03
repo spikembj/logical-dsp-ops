@@ -50,9 +50,15 @@ export default async function DriverPerformancePage({ params }: Props) {
 
   // Two visual groups (Safety, Delivery Quality), separated by a vertical
   // divider running through both header rows and every body row.
-  // Header rows get hover:bg-transparent to avoid the default row-highlight
-  // from shadcn's TableRow.
-  const SEP = "border-l border-border";
+  //
+  // The divider is a pseudo-element instead of a real border-l so it can
+  // inset itself from the row's top/bottom borders — no T-intersections
+  // where the column rule meets the horizontal row rule.
+  //
+  // Header rows get hover:bg-transparent to avoid shadcn's default
+  // row-highlight on hover.
+  const SEP =
+    "relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-border before:content-['']";
 
   return (
     <div className="space-y-3">
