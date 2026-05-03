@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/require-role";
 import { getDriverById } from "@/lib/queries/drivers";
 import { listSessionsForDriver } from "@/lib/queries/coaching";
+import { getDriverCoachingTriggers } from "@/lib/queries/coaching-triggers";
 import { LogSessionDialog } from "@/components/app/coaching/log-session-dialog";
 import { CoachingSessionList } from "@/components/app/coaching/session-list";
+import { TriggersPanel } from "@/components/app/coaching/triggers-panel";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -15,11 +17,16 @@ export default async function DriverCoachingPage({ params }: Props) {
   const driver = await getDriverById(id);
   if (!driver) notFound();
 
-  const sessions = await listSessionsForDriver(id);
+  const [sessions, triggers] = await Promise.all([
+    listSessionsForDriver(id),
+    getDriverCoachingTriggers(id),
+  ]);
   const activeCount = sessions.filter((s) => !s.voided_at).length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <TriggersPanel triggers={triggers} />
+
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-medium">Coaching history</h2>

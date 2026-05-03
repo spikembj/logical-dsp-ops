@@ -1,17 +1,41 @@
+import { format } from "date-fns";
 import { requireUser } from "@/lib/auth/require-role";
 import { getDashboardData } from "@/lib/queries/dashboard";
-import {
-  amazonWeekFromEndingDate,
-  formatSessionDate,
-} from "@/lib/format/dates";
+import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
+import { SplitStatTile } from "@/components/app/dashboard/split-stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
 import { RecentActivity } from "@/components/app/dashboard/recent-activity";
+
+/** First name from full_name; falls back to "there" if it's an email. */
+function getFirstName(profile: { full_name: string | null; email: string }) {
+  const fn = profile.full_name?.trim();
+  if (!fn) return "there";
+  if (fn.includes("@")) return "there";
+  return fn.split(/\s+/)[0];
+}
+
+/** "May 3rd, 2026" — full month + ordinal day. */
+function formatHeaderDate(d: Date): string {
+  return format(d, "MMMM do, yyyy");
+}
+
+/** Amazon week (Sun-Sat) that contains the given date. */
+function currentAmazonWeek(d: Date): { week: number; year: number } {
+  // Find the Saturday of this week. If d is Saturday, that's d itself;
+  // otherwise the next Saturday.
+  const dayOfWeek = d.getUTCDay(); // 0 = Sun, 6 = Sat
+  const daysUntilSaturday = (6 - dayOfWeek + 7) % 7;
+  const saturday = new Date(d.getTime() + daysUntilSaturday * 86_400_000);
+  const iso = saturday.toISOString().slice(0, 10);
+  return amazonWeekFromEndingDate(iso);
+}
 
 export default async function DashboardPage() {
   const me = await requireUser();
   const data = await getDashboardData();
-  const { week, year } = amazonWeekFromEndingDate(data.window.asOf);
+  const today = new Date();
+  const { week, year } = currentAmazonWeek(today);
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -19,15 +43,19 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Hi {me.full_name?.split(" ")[0] ?? me.email}.{" "}
+            Hi {getFirstName(me)} —{" "}
             <span className="text-foreground font-medium">
-              Week {week}, {year}
-            </span>{" "}
-            · ending{" "}
-            <span className="text-foreground font-medium">
-              {formatSessionDate(data.window.asOf)}
+              Week {week}, {formatHeaderDate(today)}
             </span>
-            .
+            {data.window.asOf !== today.toISOString().slice(0, 10) && (
+              <>
+                {" "}
+                <span className="text-xs">
+                  (data through{" "}
+                  {format(new Date(`${data.window.asOf}T12:00:00Z`), "MMM d")})
+                </span>
+              </>
+            )}
           </p>
         </div>
       </header>
@@ -37,7 +65,7 @@ export default async function DashboardPage() {
         <StatTile
           label="Active drivers"
           value={data.stats.activeDriverCount}
-          hint="last 60 days of activity"
+          hint="last 30 days of activity"
         />
         <StatTile
           label="Safety events"
@@ -54,19 +82,19 @@ export default async function DashboardPage() {
           value={data.stats.sessionCount}
           hint="logged this week"
         />
-        <StatTile
+        <SplitStatTile
           label="Needs coaching"
-          value={data.stats.needsSafetyCount}
-          secondary={{
-            label: "quality",
-            value: data.stats.needsQualityCount,
+          hint="open triggers, no session yet"
+          left={{
+            label: "Safety",
+            value: data.stats.needsSafetyCount,
+            accent: data.stats.needsSafetyCount > 0 ? "warn" : "good",
           }}
-          hint="safety · quality"
-          accent={
-            data.stats.needsSafetyCount + data.stats.needsQualityCount > 0
-              ? "warn"
-              : "good"
-          }
+          right={{
+            label: "Quality",
+            value: data.stats.needsQualityCount,
+            accent: data.stats.needsQualityCount > 0 ? "warn" : "good",
+          }}
         />
       </section>
 

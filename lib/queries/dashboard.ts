@@ -1,6 +1,11 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { evaluateScorecard, QUALITY_THRESHOLDS } from "@/lib/queries/coaching-triggers";
+
+// Re-export the thresholds so the dashboard page can show them in the
+// helper text.
+export { QUALITY_THRESHOLDS };
 
 /**
  * Server queries powering the dashboard. Everything is cached per request
@@ -65,75 +70,30 @@ async function resolveWindow(): Promise<DashboardWindow> {
   };
 }
 
-// Quality coaching thresholds — sourced from the user's standards.
-// A driver "needs Quality coaching" if their most recent scorecard fails
-// any one of these.
-const QUALITY_THRESHOLDS = {
-  dcrMin: 99.0,        // %  : DCR < 99.0%
-  podMin: 99.0,        // %  : POD < 99%
-  cdfMax: 800,         // DPMO : CDF DPMO > 800
-  cedMax: 0,           // count: any CED ≥ 1
-  dsbMin: 233,         // DPMO : DSB < 233 (DSB is positive — higher = better)
-  psbMaxPct: 10,       // %  : PSB defect rate > 10% (i.e. < 90% success)
-} as const;
-
-export interface QualityIssue {
-  metric: string;
-  value: number;
-  threshold: string;
-}
-
-function evaluateScorecard(
-  s: {
-    dcr: number | null;
-    pod: number | null;
-    cdf: number | null;
-    ced: number | null;
-    dsb: number | null;
-    psb: number | null;
-  },
-): QualityIssue[] {
-  const out: QualityIssue[] = [];
-  if (s.dcr !== null && s.dcr < QUALITY_THRESHOLDS.dcrMin) {
-    out.push({ metric: "DCR", value: s.dcr, threshold: `< ${QUALITY_THRESHOLDS.dcrMin}%` });
-  }
-  if (s.pod !== null && s.pod < QUALITY_THRESHOLDS.podMin) {
-    out.push({ metric: "POD", value: s.pod, threshold: `< ${QUALITY_THRESHOLDS.podMin}%` });
-  }
-  if (s.cdf !== null && s.cdf > QUALITY_THRESHOLDS.cdfMax) {
-    out.push({ metric: "CDF DPMO", value: s.cdf, threshold: `> ${QUALITY_THRESHOLDS.cdfMax}` });
-  }
-  if (s.ced !== null && s.ced > QUALITY_THRESHOLDS.cedMax) {
-    out.push({ metric: "CED", value: s.ced, threshold: `≥ 1` });
-  }
-  if (s.dsb !== null && s.dsb < QUALITY_THRESHOLDS.dsbMin) {
-    out.push({ metric: "DSB", value: s.dsb, threshold: `< ${QUALITY_THRESHOLDS.dsbMin}` });
-  }
-  if (s.psb !== null && s.psb > QUALITY_THRESHOLDS.psbMaxPct) {
-    out.push({
-      metric: "PSB",
-      value: s.psb,
-      threshold: `> ${QUALITY_THRESHOLDS.psbMaxPct}% defect rate`,
-    });
-  }
-  return out;
-}
+// Quality threshold logic + evaluateScorecard live in
+// lib/queries/coaching-triggers.ts so the per-driver coaching tab
+// shares them.
 
 export const getDashboardData = cache(async () => {
   const supabase = await createClient();
   const win = await resolveWindow();
 
   // --- Stats -----------------------------------------------------------
+  // Active drivers (dashboard tile): drivers with activity in the last 30
+  // days. This is stricter than the 60-day inactive-status cutoff — those
+  // 30-60-day-stale drivers still appear as 'active' in the drivers list
+  // but don't count toward the operational headcount.
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+  const thirtyDaysAgoIso = thirtyDaysAgo.toISOString();
+  const thirtyDaysAgoDate = thirtyDaysAgoIso.slice(0, 10);
+
   const [
-    activeDriversRes,
     impactingRes,
     nonImpactingRes,
     sessionsRes,
+    eventDriverIdsRes,
+    scorecardDriverIdsRes,
   ] = await Promise.all([
-    supabase
-      .from("drivers")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active"),
     supabase
       .from("safety_events")
       .select("driver_id, count, event_type")
@@ -152,9 +112,29 @@ export const getDashboardData = cache(async () => {
       .gte("session_date", win.start)
       .lte("session_date", win.asOf)
       .is("voided_at", null),
+    supabase
+      .from("safety_events")
+      .select("driver_id")
+      .gte("event_date", thirtyDaysAgoIso),
+    supabase
+      .from("scorecards")
+      .select("driver_id")
+      .gte("week_ending", thirtyDaysAgoDate),
   ]);
 
-  const activeDriverCount = activeDriversRes.count ?? 0;
+  // Distinct drivers with any data in last 30 days, gated to status='active'.
+  const recentDriverIds = new Set<string>();
+  for (const r of eventDriverIdsRes.data ?? []) recentDriverIds.add(r.driver_id);
+  for (const r of scorecardDriverIdsRes.data ?? []) recentDriverIds.add(r.driver_id);
+  let activeDriverCount = 0;
+  if (recentDriverIds.size > 0) {
+    const { count } = await supabase
+      .from("drivers")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .in("id", [...recentDriverIds]);
+    activeDriverCount = count ?? 0;
+  }
   const impactingEventRows = impactingRes.data ?? [];
   const impactingEventTotal = impactingEventRows.reduce(
     (s, e) => s + (e.count ?? 0),
