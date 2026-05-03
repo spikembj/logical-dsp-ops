@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScorecardUpload } from "@/components/app/import/scorecard-upload";
 import { NetradyneUpload } from "@/components/app/import/netradyne-upload";
+import { DspOverviewUpload } from "@/components/app/import/dsp-overview-upload";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
@@ -16,11 +17,15 @@ export default async function ImportPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="scorecard" className="w-full">
+      <Tabs defaultValue="dsp-overview" className="w-full">
         <TabsList>
+          <TabsTrigger value="dsp-overview">DSP Overview (CSV)</TabsTrigger>
           <TabsTrigger value="scorecard">Scorecard (PDF)</TabsTrigger>
           <TabsTrigger value="netradyne">Netradyne (CSV)</TabsTrigger>
         </TabsList>
+        <TabsContent value="dsp-overview" className="mt-4">
+          <DspOverviewUpload />
+        </TabsContent>
         <TabsContent value="scorecard" className="mt-4">
           <ScorecardUpload />
         </TabsContent>
