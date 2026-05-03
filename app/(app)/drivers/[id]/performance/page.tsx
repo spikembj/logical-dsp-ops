@@ -86,7 +86,7 @@ export default async function DriverPerformancePage({ params }: Props) {
                   className="sticky left-0 bg-card font-medium z-10"
                   title={`Week ending ${formatSessionDate(s.week_ending)}`}
                 >
-                  Week {week}, {year}
+                  {week}, {year}
                 </TableCell>
                 <TableCell className="text-right">
                   {fmt(s.delivered)}
