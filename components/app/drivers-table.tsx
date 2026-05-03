@@ -12,7 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, TierBadge } from "@/lib/format/badges";
-import type { DriverRow, DriverStatus } from "@/lib/types/database";
+import type { DriverStatus } from "@/lib/types/database";
+import type { DriverListItem } from "@/lib/queries/drivers";
 import { Search, X } from "lucide-react";
 
 const STATUS_FILTERS: { label: string; value: DriverStatus | "all" }[] = [
@@ -23,7 +24,7 @@ const STATUS_FILTERS: { label: string; value: DriverStatus | "all" }[] = [
   { label: "Terminated", value: "terminated" },
 ];
 
-export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
+export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<DriverStatus | "all">(
     "active",
@@ -89,6 +90,7 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
               </TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Current tier</TableHead>
+              <TableHead className="text-right">Score</TableHead>
               <TableHead className="hidden lg:table-cell">
                 Last coached
               </TableHead>
@@ -101,7 +103,7 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={7}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   No matches.
@@ -127,7 +129,14 @@ export function DriversTable({ drivers }: { drivers: DriverRow[] }) {
                     <StatusBadge status={d.status} />
                   </TableCell>
                   <TableCell>
-                    <TierBadge tier={null} />
+                    <TierBadge tier={d.latest_tier} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-sm">
+                    {d.latest_overall_score === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      d.latest_overall_score.toFixed(1)
+                    )}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                     —

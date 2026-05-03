@@ -13,6 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TierBadge } from "@/lib/format/badges";
+import type { Tier } from "@/lib/types/database";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -31,7 +33,7 @@ export default async function DriverPerformancePage({ params }: Props) {
           No scorecards yet for {driver.full_name}.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Upload a weekly scorecard PDF on the{" "}
+          Upload a weekly scorecard PDF or DSP Overview CSV on the{" "}
           <a href="/import" className="underline-offset-4 hover:underline">
             Import
           </a>{" "}
@@ -48,18 +50,9 @@ export default async function DriverPerformancePage({ params }: Props) {
       `${n}${suffix}`
     );
 
-  // Two visual groups (Safety, Delivery Quality), separated by a vertical
-  // divider running through both header rows and every body row.
-  //
-  // The divider is a pseudo-element instead of a real border-l so it can
-  // inset itself from the row's top/bottom borders — no T-intersections
-  // where the column rule meets the horizontal row rule.
-  //
-  // bg-foreground/15 (translucent) gives enough contrast on both light and
-  // dark backgrounds without being heavy.
-  //
-  // Header rows get hover:bg-transparent to avoid shadcn's default
-  // row-highlight on hover.
+  // Vertical group divider — pseudo-element with row-line gaps.
+  const SEP =
+    "relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']";
 
   return (
     <div className="space-y-3">
@@ -71,19 +64,25 @@ export default async function DriverPerformancePage({ params }: Props) {
       <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
-            {/* Group-label row: blank over Week + Delivered, then Safety + Quality. */}
+            {/* Group-label row */}
             <TableRow className="hover:bg-transparent">
               <TableHead className="sticky left-0 bg-card z-10" />
+              <TableHead
+                colSpan={2}
+                className="text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal"
+              >
+                Standing
+              </TableHead>
               <TableHead />
               <TableHead
                 colSpan={6}
-                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}
+                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal ${SEP}`}
               >
                 Safety
               </TableHead>
               <TableHead
                 colSpan={8}
-                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}
+                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal ${SEP}`}
               >
                 Delivery Quality
               </TableHead>
@@ -93,16 +92,19 @@ export default async function DriverPerformancePage({ params }: Props) {
               <TableHead className="sticky left-0 bg-card z-10 text-center">
                 Week
               </TableHead>
+              {/* Standing */}
+              <TableHead className="text-center">Tier</TableHead>
+              <TableHead className="text-right">Score</TableHead>
               <TableHead className="text-right">Delivered</TableHead>
               {/* Safety */}
-              <TableHead className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>FICO</TableHead>
+              <TableHead className={`text-right ${SEP}`}>FICO</TableHead>
               <TableHead className="text-right">Seatbelt off</TableHead>
               <TableHead className="text-right">Speeding</TableHead>
               <TableHead className="text-right">Distractions</TableHead>
               <TableHead className="text-right">Following dist.</TableHead>
               <TableHead className="text-right">Sign/signal</TableHead>
               {/* Delivery Quality */}
-              <TableHead className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>CDF DPMO</TableHead>
+              <TableHead className={`text-right ${SEP}`}>CDF DPMO</TableHead>
               <TableHead className="text-right">CED</TableHead>
               <TableHead className="text-right">DCR</TableHead>
               <TableHead className="text-right">DSB</TableHead>
@@ -123,11 +125,23 @@ export default async function DriverPerformancePage({ params }: Props) {
                   >
                     {week}, {year}
                   </TableCell>
+                  {/* Standing */}
+                  <TableCell className="text-center">
+                    <TierBadge tier={(s.tier as Tier | null) ?? null} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {s.overall_score === null ||
+                    s.overall_score === undefined ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      s.overall_score.toFixed(1)
+                    )}
+                  </TableCell>
                   <TableCell className="text-right">
                     {fmt(s.delivered)}
                   </TableCell>
                   {/* Safety */}
-                  <TableCell className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>
+                  <TableCell className={`text-right ${SEP}`}>
                     {fmt(s.fico_score)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -146,7 +160,7 @@ export default async function DriverPerformancePage({ params }: Props) {
                     {fmt(s.sign_signal_violations_rate)}
                   </TableCell>
                   {/* Delivery Quality */}
-                  <TableCell className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>
+                  <TableCell className={`text-right ${SEP}`}>
                     {fmt(s.cdf)}
                   </TableCell>
                   <TableCell className="text-right">{fmt(s.ced)}</TableCell>

@@ -1,9 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/require-role";
-import { getDriverById } from "@/lib/queries/drivers";
+import { getDriverById, getLatestScorecard } from "@/lib/queries/drivers";
 import { StatusBadge, TierBadge } from "@/lib/format/badges";
 import { DriverTabs } from "@/components/app/driver-tabs";
+import {
+  amazonWeekFromEndingDate,
+} from "@/lib/format/dates";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -15,6 +18,13 @@ export default async function DriverLayout({ params, children }: Props) {
   const { id } = await params;
   const driver = await getDriverById(id);
   if (!driver) notFound();
+  const latest = await getLatestScorecard(id);
+  const latestWeekLabel = latest
+    ? (() => {
+        const { week, year } = amazonWeekFromEndingDate(latest.week_ending);
+        return `Week ${week}, ${year}`;
+      })()
+    : null;
 
   return (
     <div className="space-y-6">
@@ -33,7 +43,15 @@ export default async function DriverLayout({ params, children }: Props) {
             {driver.full_name}
           </h1>
           <StatusBadge status={driver.status} />
-          <TierBadge tier={null /* current week tier — populated in step 4 */} />
+          <TierBadge tier={latest?.tier ?? null} />
+          {latest?.overall_score !== null && latest?.overall_score !== undefined && (
+            <span
+              className="text-xs text-muted-foreground tabular-nums"
+              title={latestWeekLabel ?? undefined}
+            >
+              Score {latest.overall_score.toFixed(1)}
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
             Last coached: —
           </span>
