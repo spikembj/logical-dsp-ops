@@ -55,10 +55,11 @@ export default async function DriverPerformancePage({ params }: Props) {
   // inset itself from the row's top/bottom borders — no T-intersections
   // where the column rule meets the horizontal row rule.
   //
+  // bg-foreground/15 (translucent) gives enough contrast on both light and
+  // dark backgrounds without being heavy.
+  //
   // Header rows get hover:bg-transparent to avoid shadcn's default
   // row-highlight on hover.
-  const SEP =
-    "relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-border before:content-['']";
 
   return (
     <div className="space-y-3">
@@ -76,30 +77,32 @@ export default async function DriverPerformancePage({ params }: Props) {
               <TableHead />
               <TableHead
                 colSpan={6}
-                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal ${SEP}`}
+                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}
               >
                 Safety
               </TableHead>
               <TableHead
                 colSpan={8}
-                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal ${SEP}`}
+                className={`text-center text-[10px] uppercase tracking-wider text-muted-foreground font-normal relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}
               >
                 Delivery Quality
               </TableHead>
             </TableRow>
             {/* Per-metric column headers */}
             <TableRow className="hover:bg-transparent">
-              <TableHead className="sticky left-0 bg-card z-10">Week</TableHead>
+              <TableHead className="sticky left-0 bg-card z-10 text-center">
+                Week
+              </TableHead>
               <TableHead className="text-right">Delivered</TableHead>
               {/* Safety */}
-              <TableHead className={`text-right ${SEP}`}>FICO</TableHead>
+              <TableHead className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>FICO</TableHead>
               <TableHead className="text-right">Seatbelt off</TableHead>
               <TableHead className="text-right">Speeding</TableHead>
               <TableHead className="text-right">Distractions</TableHead>
               <TableHead className="text-right">Following dist.</TableHead>
               <TableHead className="text-right">Sign/signal</TableHead>
               {/* Delivery Quality */}
-              <TableHead className={`text-right ${SEP}`}>CDF DPMO</TableHead>
+              <TableHead className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>CDF DPMO</TableHead>
               <TableHead className="text-right">CED</TableHead>
               <TableHead className="text-right">DCR</TableHead>
               <TableHead className="text-right">DSB</TableHead>
@@ -124,7 +127,7 @@ export default async function DriverPerformancePage({ params }: Props) {
                     {fmt(s.delivered)}
                   </TableCell>
                   {/* Safety */}
-                  <TableCell className={`text-right ${SEP}`}>
+                  <TableCell className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>
                     {fmt(s.fico_score)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -143,7 +146,7 @@ export default async function DriverPerformancePage({ params }: Props) {
                     {fmt(s.sign_signal_violations_rate)}
                   </TableCell>
                   {/* Delivery Quality */}
-                  <TableCell className={`text-right ${SEP}`}>
+                  <TableCell className={`text-right relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']`}>
                     {fmt(s.cdf)}
                   </TableCell>
                   <TableCell className="text-right">{fmt(s.ced)}</TableCell>
