@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScorecardUpload } from "@/components/app/import/scorecard-upload";
 import { NetradyneUpload } from "@/components/app/import/netradyne-upload";
 import { DspOverviewUpload } from "@/components/app/import/dsp-overview-upload";
+import { EscalationsUpload } from "@/components/app/import/escalations-upload";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
@@ -22,6 +23,7 @@ export default async function ImportPage() {
           <TabsTrigger value="dsp-overview">DSP Overview (CSV)</TabsTrigger>
           <TabsTrigger value="scorecard">Scorecard (PDF)</TabsTrigger>
           <TabsTrigger value="netradyne">Netradyne (CSV)</TabsTrigger>
+          <TabsTrigger value="escalations">Escalations (CSV)</TabsTrigger>
         </TabsList>
         <TabsContent value="dsp-overview" className="mt-4">
           <DspOverviewUpload />
@@ -31,6 +33,9 @@ export default async function ImportPage() {
         </TabsContent>
         <TabsContent value="netradyne" className="mt-4">
           <NetradyneUpload />
+        </TabsContent>
+        <TabsContent value="escalations" className="mt-4">
+          <EscalationsUpload />
         </TabsContent>
       </Tabs>
     </div>

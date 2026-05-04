@@ -34,9 +34,19 @@ export interface QualityTrigger {
   threshold: string;
 }
 
+export interface EscalationTrigger {
+  id: string;
+  bucket: string | null;
+  category: string | null;
+  behavior: string;
+  incident_date: string;
+  ack_status: string | null;
+}
+
 export interface DriverCoachingTriggers {
   safety: SafetyTrigger[];
   quality: QualityTrigger[];
+  escalations: EscalationTrigger[];
   hasSessionInWindow: boolean;
   windowDays: number;
 }
@@ -108,7 +118,7 @@ export const getDriverCoachingTriggers = cache(
     const cutoffIso = new Date(cutoffMs).toISOString();
     const cutoffDate = cutoffIso.slice(0, 10);
 
-    const [eventsRes, latestRes, sessionRes] = await Promise.all([
+    const [eventsRes, latestRes, sessionRes, escRes] = await Promise.all([
       supabase
         .from("safety_events")
         .select("event_type, count")
@@ -128,6 +138,13 @@ export const getDriverCoachingTriggers = cache(
         .eq("driver_id", driverId)
         .gte("session_date", cutoffDate)
         .is("voided_at", null),
+      // Open escalations: any non-"Yes" ack_status. Not bounded by window —
+      // an unack'd escalation from any time is still open work.
+      supabase
+        .from("escalations")
+        .select("id, bucket, category, behavior, incident_date, ack_status")
+        .eq("driver_id", driverId)
+        .order("incident_date", { ascending: false }),
     ]);
 
     const byType = new Map<string, SafetyTrigger>();
@@ -144,8 +161,20 @@ export const getDriverCoachingTriggers = cache(
     const quality = latestRes.data
       ? evaluateScorecard(latestRes.data as ScorecardLite)
       : [];
+    const escalations: EscalationTrigger[] = (escRes.data ?? [])
+      .filter(
+        (e) => ((e.ack_status as string | null) ?? "").trim().toLowerCase() !== "yes",
+      )
+      .map((e) => ({
+        id: e.id as string,
+        bucket: (e.bucket as string | null) ?? null,
+        category: (e.category as string | null) ?? null,
+        behavior: e.behavior as string,
+        incident_date: e.incident_date as string,
+        ack_status: (e.ack_status as string | null) ?? null,
+      }));
     const hasSessionInWindow = (sessionRes.count ?? 0) > 0;
 
-    return { safety, quality, hasSessionInWindow, windowDays };
+    return { safety, quality, escalations, hasSessionInWindow, windowDays };
   },
 );

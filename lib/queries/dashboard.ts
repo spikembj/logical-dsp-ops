@@ -177,7 +177,7 @@ export const getDashboardData = cache(async () => {
 
   // --- Needs coaching: QUALITY -----------------------------------------
   // Pull the most recent scorecard per active driver and run threshold
-  // checks. We use the latest week_ending from the scorecards table.
+  // checks. Combine with any open Amazon escalations.
   const { data: latestWeekRes } = await supabase
     .from("scorecards")
     .select("week_ending")
@@ -204,6 +204,30 @@ export const getDashboardData = cache(async () => {
         issues: issues.map((i) => `${i.metric} ${i.value} ${i.threshold}`),
       });
     }
+  }
+
+  // Add open Amazon escalations (any non-"Yes" ack_status) as quality triggers.
+  const { data: openEscalations } = await supabase
+    .from("escalations")
+    .select("driver_id, behavior, ack_status");
+  for (const e of openEscalations ?? []) {
+    const ack = ((e.ack_status as string | null) ?? "").trim().toLowerCase();
+    if (ack === "yes") continue;
+    if (coachedDriverIds.has(e.driver_id as string)) continue;
+    const did = e.driver_id as string;
+    if (!qualityByDriver.has(did)) {
+      qualityByDriver.set(did, {
+        driver_id: did,
+        full_name: "",
+        transporter_id: null,
+        total_events: 0,
+        event_types: [],
+        issues: [],
+      });
+    }
+    const row = qualityByDriver.get(did)!;
+    row.total_events += 1;
+    row.issues.push(`Escalation: ${e.behavior}`);
   }
 
   // --- Hydrate driver names for both lists -----------------------------

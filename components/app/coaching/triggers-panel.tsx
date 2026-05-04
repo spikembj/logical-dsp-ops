@@ -1,18 +1,27 @@
-import { ShieldAlert, FileWarning, CheckCircle2 } from "lucide-react";
+import {
+  ShieldAlert,
+  FileWarning,
+  AlertOctagon,
+  CheckCircle2,
+} from "lucide-react";
 import type { DriverCoachingTriggers } from "@/lib/queries/coaching-triggers";
+import { formatSessionDate } from "@/lib/format/dates";
 
 /**
- * Surfaces the open coaching triggers (uncoached impacting safety events
- * + quality threshold breaches from the latest scorecard) for a driver,
- * directly above their coaching history. Mirrors the dashboard worklist
- * but scoped to one person.
+ * Surfaces the open coaching triggers for a driver: impacting safety
+ * events, latest-scorecard quality breaches, and any open Amazon
+ * escalations. Shown above the coaching history on the driver's Coaching
+ * tab.
  */
 export function TriggersPanel({
   triggers,
 }: {
   triggers: DriverCoachingTriggers;
 }) {
-  const total = triggers.safety.length + triggers.quality.length;
+  const total =
+    triggers.safety.length +
+    triggers.quality.length +
+    triggers.escalations.length;
 
   if (total === 0 && !triggers.hasSessionInWindow) {
     return (
@@ -21,8 +30,7 @@ export function TriggersPanel({
           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <span className="font-medium">Nothing flagged this week.</span>
           <span className="text-muted-foreground">
-            No impacting events or quality breaches in the last{" "}
-            {triggers.windowDays} days.
+            No impacting events, quality breaches, or open escalations.
           </span>
         </div>
       </div>
@@ -50,11 +58,11 @@ export function TriggersPanel({
         <span className="text-xs text-muted-foreground">
           {triggers.hasSessionInWindow
             ? "Already coached this week — context only"
-            : `Last ${triggers.windowDays} days`}
+            : `Last ${triggers.windowDays} days · open escalations any time`}
         </span>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x">
-        {/* Safety side */}
+      <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x">
+        {/* Safety */}
         <div className="p-4 space-y-2">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5" />
@@ -83,7 +91,7 @@ export function TriggersPanel({
             </ul>
           )}
         </div>
-        {/* Quality side */}
+        {/* Quality */}
         <div className="p-4 space-y-2">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <FileWarning className="h-3.5 w-3.5" />
@@ -109,6 +117,37 @@ export function TriggersPanel({
                   </span>
                   <span className="text-xs text-muted-foreground">
                     threshold {q.threshold}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {/* Escalations */}
+        <div className="p-4 space-y-2">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+            <AlertOctagon className="h-3.5 w-3.5" />
+            Escalations
+            <span className="ml-auto text-foreground font-medium">
+              {triggers.escalations.length}
+            </span>
+          </div>
+          {triggers.escalations.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">
+              No open infractions from Amazon.
+            </p>
+          ) : (
+            <ul className="space-y-1 text-sm">
+              {triggers.escalations.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="truncate" title={e.behavior}>
+                    {e.behavior}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatSessionDate(e.incident_date)}
                   </span>
                 </li>
               ))}
