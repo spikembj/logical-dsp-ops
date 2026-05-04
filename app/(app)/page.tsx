@@ -119,9 +119,8 @@ export default async function DashboardPage() {
       <p className="text-xs text-muted-foreground">
         Quality coaching uses thresholds: DCR&nbsp;&lt;&nbsp;99% ·
         POD&nbsp;&lt;&nbsp;99% · CDF&nbsp;DPMO&nbsp;&gt;&nbsp;800 ·
-        any&nbsp;CED · DSB&nbsp;&lt;&nbsp;233 · PSB&nbsp;&gt;&nbsp;10%.
-        Per-driver tier (Platinum/Gold/Silver/Bronze) ships once the DSP
-        Overview Dashboard CSV import lands.
+        any&nbsp;CED · DSB&nbsp;DPMO&nbsp;&gt;&nbsp;233 · any&nbsp;DSB
+        count · PSB&nbsp;&gt;&nbsp;10% defect rate.
       </p>
     </div>
   );

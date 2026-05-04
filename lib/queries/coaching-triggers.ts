@@ -14,7 +14,12 @@ export const QUALITY_THRESHOLDS = {
   podMin: 99.0,
   cdfMax: 800,
   cedMax: 0,
-  dsbMin: 233,
+  // DSB DPMO is a defect rate (Defects Per Million Opportunities) — higher
+  // means more defects per delivery volume, so over 233 triggers coaching.
+  dsbDpmoMax: 233,
+  // DSB Count is the raw number of DSB defects this week — any defect at
+  // all is worth flagging.
+  dsbCountMax: 0,
   psbMaxPct: 10,
 } as const;
 
@@ -42,6 +47,7 @@ interface ScorecardLite {
   cdf: number | null;
   ced: number | null;
   dsb: number | null;
+  dsb_count: number | null;
   psb: number | null;
 }
 
@@ -71,11 +77,18 @@ export function evaluateScorecard(s: ScorecardLite): QualityTrigger[] {
   if (s.ced !== null && s.ced > QUALITY_THRESHOLDS.cedMax) {
     out.push({ metric: "CED", value: s.ced, threshold: "≥ 1" });
   }
-  if (s.dsb !== null && s.dsb < QUALITY_THRESHOLDS.dsbMin) {
+  if (s.dsb !== null && s.dsb > QUALITY_THRESHOLDS.dsbDpmoMax) {
     out.push({
-      metric: "DSB",
+      metric: "DSB DPMO",
       value: s.dsb,
-      threshold: `< ${QUALITY_THRESHOLDS.dsbMin}`,
+      threshold: `> ${QUALITY_THRESHOLDS.dsbDpmoMax}`,
+    });
+  }
+  if (s.dsb_count !== null && s.dsb_count > QUALITY_THRESHOLDS.dsbCountMax) {
+    out.push({
+      metric: "DSB Count",
+      value: s.dsb_count,
+      threshold: "≥ 1",
     });
   }
   if (s.psb !== null && s.psb > QUALITY_THRESHOLDS.psbMaxPct) {
@@ -104,7 +117,7 @@ export const getDriverCoachingTriggers = cache(
         .gte("event_date", cutoffIso),
       supabase
         .from("scorecards")
-        .select("dcr, pod, cdf, ced, dsb, psb, week_ending")
+        .select("dcr, pod, cdf, ced, dsb, dsb_count, psb, week_ending")
         .eq("driver_id", driverId)
         .order("week_ending", { ascending: false })
         .limit(1)

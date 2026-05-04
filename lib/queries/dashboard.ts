@@ -189,7 +189,7 @@ export const getDashboardData = cache(async () => {
   if (latestWeek) {
     const { data: latestCards } = await supabase
       .from("scorecards")
-      .select("driver_id, dcr, pod, cdf, ced, dsb, psb")
+      .select("driver_id, dcr, pod, cdf, ced, dsb, dsb_count, psb")
       .eq("week_ending", latestWeek);
     for (const sc of latestCards ?? []) {
       if (coachedDriverIds.has(sc.driver_id)) continue;
