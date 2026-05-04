@@ -15,7 +15,10 @@
 -- statuses set by humans.
 -- =============================================================================
 
-create or replace function public.refresh_driver_active_status()
+-- Drop first because we're changing the return shape (was one column, now two).
+drop function if exists public.refresh_driver_active_status();
+
+create function public.refresh_driver_active_status()
 returns table(activated_count int, deactivated_count int)
 language plpgsql
 security definer
