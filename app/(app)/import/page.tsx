@@ -4,6 +4,7 @@ import { ScorecardUpload } from "@/components/app/import/scorecard-upload";
 import { NetradyneUpload } from "@/components/app/import/netradyne-upload";
 import { DspOverviewUpload } from "@/components/app/import/dsp-overview-upload";
 import { EscalationsUpload } from "@/components/app/import/escalations-upload";
+import { ConcessionsUpload } from "@/components/app/import/concessions-upload";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
@@ -13,8 +14,8 @@ export default async function ImportPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Upload weekly Amazon scorecards (PDF) and Netradyne event reports
-          (CSV).
+          Drop Amazon weekly reports here. New drivers get auto-created;
+          existing ones match by transporter ID or name.
         </p>
       </div>
 
@@ -24,6 +25,7 @@ export default async function ImportPage() {
           <TabsTrigger value="scorecard">Scorecard (PDF)</TabsTrigger>
           <TabsTrigger value="netradyne">Netradyne (CSV)</TabsTrigger>
           <TabsTrigger value="escalations">Escalations (CSV)</TabsTrigger>
+          <TabsTrigger value="concessions">Concessions (CSV)</TabsTrigger>
         </TabsList>
         <TabsContent value="dsp-overview" className="mt-4">
           <DspOverviewUpload />
@@ -36,6 +38,9 @@ export default async function ImportPage() {
         </TabsContent>
         <TabsContent value="escalations" className="mt-4">
           <EscalationsUpload />
+        </TabsContent>
+        <TabsContent value="concessions" className="mt-4">
+          <ConcessionsUpload />
         </TabsContent>
       </Tabs>
     </div>
