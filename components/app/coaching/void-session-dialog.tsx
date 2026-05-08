@@ -87,7 +87,7 @@ export function VoidSessionDialog({
               required
               placeholder="e.g. Wrong driver attributed; data was incorrect."
               value={reason}
-              onChange={(e) => setReason(e.target.value)}
+              onChange={(e) => setReason(e.currentTarget.value)}
             />
             <p className="text-xs text-muted-foreground">
               Required. Future viewers will see this reason next to the

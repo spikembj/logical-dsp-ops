@@ -78,7 +78,7 @@ export function EscalationsUpload() {
               type="file"
               accept="text/csv,.csv"
               className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
+              onChange={(e) => handleFiles(e.currentTarget.files)}
             />
           </label>
         </p>

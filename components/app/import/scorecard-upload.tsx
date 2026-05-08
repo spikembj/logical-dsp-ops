@@ -73,7 +73,7 @@ export function ScorecardUpload() {
               type="file"
               accept="application/pdf,.pdf"
               className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
+              onChange={(e) => handleFiles(e.currentTarget.files)}
             />
           </label>
         </p>

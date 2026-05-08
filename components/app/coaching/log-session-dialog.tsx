@@ -181,7 +181,7 @@ export function LogSessionDialog(props: Props) {
                 type="date"
                 required
                 value={sessionDate}
-                onChange={(e) => setSessionDate(e.target.value)}
+                onChange={(e) => setSessionDate(e.currentTarget.value)}
               />
             </div>
             <div className="space-y-2">
@@ -190,7 +190,7 @@ export function LogSessionDialog(props: Props) {
                 id="session_type"
                 value={sessionType}
                 onChange={(e) =>
-                  setSessionType(e.target.value as CoachingSessionType)
+                  setSessionType(e.currentTarget.value as CoachingSessionType)
                 }
                 className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               >
@@ -211,7 +211,7 @@ export function LogSessionDialog(props: Props) {
               maxLength={200}
               placeholder="e.g. Hard braking on 7-Eleven route"
               value={topic}
-              onChange={(e) => setTopic(e.target.value)}
+              onChange={(e) => setTopic(e.currentTarget.value)}
             />
           </div>
 
@@ -223,7 +223,7 @@ export function LogSessionDialog(props: Props) {
               maxLength={10_000}
               placeholder="What was discussed? What did the driver agree to?"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => setNotes(e.currentTarget.value)}
             />
           </div>
 

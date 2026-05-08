@@ -50,7 +50,7 @@ export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
           <input
             type="search"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => setQuery(e.currentTarget.value)}
             placeholder="Search name or transporter ID"
             className="flex-1 min-w-0 px-2 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />

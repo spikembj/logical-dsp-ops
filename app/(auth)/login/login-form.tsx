@@ -41,7 +41,7 @@ export function LoginForm({ next }: { next: string }) {
           autoComplete="email"
           required
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.currentTarget.value)}
         />
       </div>
       <div className="space-y-2">
@@ -52,7 +52,7 @@ export function LoginForm({ next }: { next: string }) {
           autoComplete="current-password"
           required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.currentTarget.value)}
         />
       </div>
       <Button type="submit" className="w-full" disabled={pending}>

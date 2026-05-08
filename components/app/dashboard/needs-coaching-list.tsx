@@ -106,9 +106,9 @@ export function NeedsCoachingList({ safety, quality }: Props) {
               value={count}
               onChange={(e) =>
                 setCount(
-                  e.target.value === "all"
+                  e.currentTarget.value === "all"
                     ? "all"
-                    : (Number(e.target.value) as CountOption),
+                    : (Number(e.currentTarget.value) as CountOption),
                 )
               }
               className="h-7 rounded-md border border-input bg-transparent px-1.5 text-xs outline-none focus-visible:border-ring"

@@ -6,17 +6,17 @@ import { toast } from "sonner";
 import { FileUp, FileText, CircleCheck, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  importDspOverviewCsv,
-  type DspImportSummary,
-} from "@/app/actions/dsp-overview-import";
+  importCdfNegativeCsv,
+  type CdfImportSummary,
+} from "@/app/actions/cdf-import";
 import { cn } from "@/lib/utils";
 
-export function DspOverviewUpload() {
+export function CdfUpload() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [dragOver, setDragOver] = useState(false);
   const [selected, setSelected] = useState<File | null>(null);
-  const [summary, setSummary] = useState<DspImportSummary | null>(null);
+  const [summary, setSummary] = useState<CdfImportSummary | null>(null);
 
   function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -34,12 +34,12 @@ export function DspOverviewUpload() {
     const fd = new FormData();
     fd.append("file", selected);
     startTransition(async () => {
-      const res = await importDspOverviewCsv(fd);
+      const res = await importCdfNegativeCsv(fd);
       setSummary(res);
       if (res.ok) {
         toast.success(
-          `Imported ${res.scorecards_written ?? 0} scorecard${
-            (res.scorecards_written ?? 0) === 1 ? "" : "s"
+          `Imported ${res.rows_written ?? 0} CDF row${
+            (res.rows_written ?? 0) === 1 ? "" : "s"
           }.`,
         );
         router.refresh();
@@ -71,7 +71,7 @@ export function DspOverviewUpload() {
       >
         <FileUp className="mx-auto h-8 w-8 text-muted-foreground" />
         <p className="mt-3 text-sm">
-          Drop the DSP Overview Dashboard CSV here, or{" "}
+          Drop the Customer Delivery Feedback (negative) CSV here, or{" "}
           <label className="text-primary underline-offset-4 hover:underline cursor-pointer">
             browse
             <input
@@ -83,12 +83,11 @@ export function DspOverviewUpload() {
           </label>
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Per-driver weekly metrics with tier + overall score, e.g.{" "}
+          One row per negative customer comment. Daily and weekly exports
+          share the same format and can both be uploaded here, e.g.{" "}
           <code className="font-mono text-[11px]">
-            DSP_Overview_Dashboard_LGCL_DUT7_2026-W17.csv
+            DSP_Customer_Delivery_Feedback_negative_DUT7_2026-W17.csv
           </code>
-          . Replaces the Scorecard PDF for weeks where you have both — they
-          target the same scorecards table.
         </p>
       </div>
 
@@ -114,16 +113,16 @@ export function DspOverviewUpload() {
             <h3 className="text-sm font-semibold">Import complete</h3>
           </div>
           <dl className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-sm">
-            <dt className="text-muted-foreground">Weeks in CSV</dt>
-            <dd>{summary.parsed.weeks_present.join(", ") || "—"}</dd>
-            <dt className="text-muted-foreground">Driver rows</dt>
-            <dd>{summary.parsed.drivers.length}</dd>
+            <dt className="text-muted-foreground">Drivers in report</dt>
+            <dd>{summary.parsed.drivers_in_report}</dd>
+            <dt className="text-muted-foreground">CDF rows</dt>
+            <dd>{summary.parsed.rows.length}</dd>
             <dt className="text-muted-foreground">Matched existing</dt>
             <dd>{summary.matched_count ?? 0}</dd>
             <dt className="text-muted-foreground">New drivers created</dt>
             <dd>{summary.created_drivers_count ?? 0}</dd>
-            <dt className="text-muted-foreground">Scorecards written</dt>
-            <dd>{summary.scorecards_written ?? 0}</dd>
+            <dt className="text-muted-foreground">Rows written</dt>
+            <dd>{summary.rows_written ?? 0}</dd>
             {summary.errors && summary.errors.length > 0 && (
               <>
                 <dt className="text-muted-foreground">Errors</dt>
