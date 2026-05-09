@@ -5,6 +5,7 @@ import {
   getLatestPodDetails,
   podRejectBreakdown,
 } from "@/lib/queries/pod-details";
+import { listDefectsForDriver } from "@/lib/queries/defects";
 import {
   amazonWeekFromEndingDate,
   formatSessionDate,
@@ -28,11 +29,36 @@ export default async function DriverPerformancePage({ params }: Props) {
   const { id } = await params;
   const driver = await getDriverById(id);
   if (!driver) notFound();
-  const [scorecards, podLatest] = await Promise.all([
+  const [scorecards, podLatest, defects] = await Promise.all([
     listScorecardsForDriver(id),
     getLatestPodDetails(id),
+    listDefectsForDriver(id),
   ]);
   const podBreakdown = podLatest ? podRejectBreakdown(podLatest) : [];
+
+  // Aggregate concessions + CDF for the summary cards on this tab.
+  const concessions = defects.filter((d) => d.kind === "concession");
+  const cdfRows = defects.filter((d) => d.kind === "cdf");
+  const concDsbCount = concessions.filter((c) => c.impacts_dsb).length;
+  const concTypeCounts = new Map<string, number>();
+  for (const c of concessions) {
+    for (const t of c.defect_types ?? [])
+      concTypeCounts.set(t, (concTypeCounts.get(t) ?? 0) + 1);
+  }
+  const concTypeBreakdown = [...concTypeCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+  const cdfTypeCounts = new Map<string, number>();
+  for (const c of cdfRows) {
+    for (const t of c.feedback_types ?? [])
+      cdfTypeCounts.set(t, (cdfTypeCounts.get(t) ?? 0) + 1);
+  }
+  const cdfTypeBreakdown = [...cdfTypeCounts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+  const cdfRecentComments = cdfRows
+    .filter((c) => c.feedback_details && c.feedback_details.trim() !== "")
+    .slice(0, 3);
 
   if (scorecards.length === 0) {
     return (
@@ -193,8 +219,9 @@ export default async function DriverPerformancePage({ params }: Props) {
         </Table>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
       {podLatest && podLatest.rejects > 0 && (
-        <section className="rounded-xl border bg-card p-4 space-y-3 max-w-md">
+        <section className="rounded-xl border bg-card p-4 space-y-3">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-medium">POD reject breakdown</h3>
             <span className="text-xs text-muted-foreground">
@@ -233,6 +260,92 @@ export default async function DriverPerformancePage({ params }: Props) {
           )}
         </section>
       )}
+
+      {concessions.length > 0 && (
+        <section className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-medium">Concessions</h3>
+            <span className="text-xs text-muted-foreground">
+              all weeks on file
+            </span>
+          </div>
+          <div className="grid grid-cols-2 text-sm">
+            <div>
+              <div className="text-xs text-muted-foreground">Total</div>
+              <div className="tabular-nums">{concessions.length}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">
+                Impacts DSB
+              </div>
+              <div className="tabular-nums text-rose-700 dark:text-rose-400">
+                {concDsbCount}
+              </div>
+            </div>
+          </div>
+          {concTypeBreakdown.length > 0 && (
+            <ul className="space-y-1 text-sm border-t pt-2">
+              {concTypeBreakdown.map((c) => (
+                <li
+                  key={c.label}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="text-foreground/80">{c.label}</span>
+                  <span className="tabular-nums">{c.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {cdfRows.length > 0 && (
+        <section className="rounded-xl border bg-card p-4 space-y-3 md:col-span-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-medium">
+              Customer Delivery Feedback (negative)
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {cdfRows.length} {cdfRows.length === 1 ? "comment" : "comments"}{" "}
+              on file
+            </span>
+          </div>
+          {cdfTypeBreakdown.length > 0 && (
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm border-t pt-2">
+              {cdfTypeBreakdown.map((c) => (
+                <li
+                  key={c.label}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="text-foreground/80">{c.label}</span>
+                  <span className="tabular-nums">{c.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {cdfRecentComments.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                Show recent comments ({cdfRecentComments.length})
+              </summary>
+              <ul className="mt-2 space-y-2">
+                {cdfRecentComments.map((c) => (
+                  <li
+                    key={c.id}
+                    className="border-l-2 border-muted pl-3 italic text-foreground/80"
+                  >
+                    “{c.feedback_details!.trim()}”
+                    <span className="block not-italic text-[11px] text-muted-foreground mt-0.5">
+                      {c.date.slice(0, 10)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
+      )}
+      </div>
     </div>
   );
 }

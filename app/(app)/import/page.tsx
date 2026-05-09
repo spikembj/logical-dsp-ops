@@ -7,12 +7,14 @@ import { EscalationsUpload } from "@/components/app/import/escalations-upload";
 import { ConcessionsUpload } from "@/components/app/import/concessions-upload";
 import { CdfUpload } from "@/components/app/import/cdf-upload";
 import { PodDetailsUpload } from "@/components/app/import/pod-details-upload";
+import { GlobalDropGuard } from "@/components/app/import/global-drop-guard";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <GlobalDropGuard />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Import</h1>
         <p className="text-sm text-muted-foreground mt-1">
