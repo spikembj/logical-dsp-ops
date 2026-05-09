@@ -6,6 +6,7 @@ import { DspOverviewUpload } from "@/components/app/import/dsp-overview-upload";
 import { EscalationsUpload } from "@/components/app/import/escalations-upload";
 import { ConcessionsUpload } from "@/components/app/import/concessions-upload";
 import { CdfUpload } from "@/components/app/import/cdf-upload";
+import { PodDetailsUpload } from "@/components/app/import/pod-details-upload";
 
 export default async function ImportPage() {
   await requireRole(["admin", "manager"]);
@@ -28,6 +29,7 @@ export default async function ImportPage() {
           <TabsTrigger value="escalations">Escalations (CSV)</TabsTrigger>
           <TabsTrigger value="concessions">Concessions (CSV)</TabsTrigger>
           <TabsTrigger value="cdf">CDF Negative (CSV)</TabsTrigger>
+          <TabsTrigger value="pod-details">POD Details (PDF)</TabsTrigger>
         </TabsList>
         <TabsContent value="dsp-overview" className="mt-4">
           <DspOverviewUpload />
@@ -46,6 +48,9 @@ export default async function ImportPage() {
         </TabsContent>
         <TabsContent value="cdf" className="mt-4">
           <CdfUpload />
+        </TabsContent>
+        <TabsContent value="pod-details" className="mt-4">
+          <PodDetailsUpload />
         </TabsContent>
       </Tabs>
     </div>

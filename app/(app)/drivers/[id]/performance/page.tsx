@@ -2,6 +2,10 @@ import { notFound } from "next/navigation";
 import { getDriverById } from "@/lib/queries/drivers";
 import { listScorecardsForDriver } from "@/lib/queries/scorecards";
 import {
+  getLatestPodDetails,
+  podRejectBreakdown,
+} from "@/lib/queries/pod-details";
+import {
   amazonWeekFromEndingDate,
   formatSessionDate,
 } from "@/lib/format/dates";
@@ -24,7 +28,11 @@ export default async function DriverPerformancePage({ params }: Props) {
   const { id } = await params;
   const driver = await getDriverById(id);
   if (!driver) notFound();
-  const scorecards = await listScorecardsForDriver(id);
+  const [scorecards, podLatest] = await Promise.all([
+    listScorecardsForDriver(id),
+    getLatestPodDetails(id),
+  ]);
+  const podBreakdown = podLatest ? podRejectBreakdown(podLatest) : [];
 
   if (scorecards.length === 0) {
     return (
@@ -184,6 +192,47 @@ export default async function DriverPerformancePage({ params }: Props) {
           </TableBody>
         </Table>
       </div>
+
+      {podLatest && podLatest.rejects > 0 && (
+        <section className="rounded-xl border bg-card p-4 space-y-3 max-w-md">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-medium">POD reject breakdown</h3>
+            <span className="text-xs text-muted-foreground">
+              Week {amazonWeekFromEndingDate(podLatest.week_ending).week},{" "}
+              {amazonWeekFromEndingDate(podLatest.week_ending).year}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 text-sm">
+            <div>
+              <div className="text-xs text-muted-foreground">Opportunities</div>
+              <div className="tabular-nums">{podLatest.opportunities}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Success</div>
+              <div className="tabular-nums">{podLatest.success}</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Rejects</div>
+              <div className="tabular-nums text-rose-700 dark:text-rose-400">
+                {podLatest.rejects}
+              </div>
+            </div>
+          </div>
+          {podBreakdown.length > 0 && (
+            <ul className="space-y-1 text-sm border-t pt-2">
+              {podBreakdown.map((c) => (
+                <li
+                  key={c.label}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="text-foreground/80">{c.label}</span>
+                  <span className="tabular-nums">{c.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }
