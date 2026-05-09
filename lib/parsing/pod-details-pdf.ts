@@ -139,8 +139,10 @@ function extractWeekYear(
   // The POD Details PDF puts the year only in the filename
   // (e.g. "US-LGCL-DUT7-Week16-2026NA-DA-POD-Details.pdf"), not the page
   // text. Fall back to the filename when the in-PDF text doesn't have it.
+  // Note: we deliberately don't require a trailing word boundary because
+  // the filename glues "2026NA" together with no separator.
   if (!year && fallbackFromFileName) {
-    const m = fallbackFromFileName.match(/\b(20\d{2})\b/);
+    const m = fallbackFromFileName.match(/(20\d{2})/);
     if (m) year = Number(m[1]);
   }
   if (!week && fallbackFromFileName) {
