@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth/require-role";
+import { requireManagement } from "@/lib/auth/require-role";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScorecardUpload } from "@/components/app/import/scorecard-upload";
 import { NetradyneUpload } from "@/components/app/import/netradyne-upload";
@@ -10,7 +10,7 @@ import { PodDetailsUpload } from "@/components/app/import/pod-details-upload";
 import { GlobalDropGuard } from "@/components/app/import/global-drop-guard";
 
 export default async function ImportPage() {
-  await requireRole(["admin", "manager"]);
+  await requireManagement();
 
   return (
     <div className="space-y-6 max-w-2xl">

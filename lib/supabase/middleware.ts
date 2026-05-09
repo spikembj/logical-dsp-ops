@@ -69,7 +69,14 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (profile.role !== "admin") {
+    const managementRoles = [
+      "owner",
+      "hr",
+      "ops_manager",
+      "admin",
+      "manager",
+    ];
+    if (!managementRoles.includes(profile.role)) {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);

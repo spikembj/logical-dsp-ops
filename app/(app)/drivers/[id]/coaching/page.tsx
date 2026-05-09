@@ -6,6 +6,7 @@ import { getDriverCoachingTriggers } from "@/lib/queries/coaching-triggers";
 import { LogSessionDialog } from "@/components/app/coaching/log-session-dialog";
 import { CoachingSessionList } from "@/components/app/coaching/session-list";
 import { TriggersPanel } from "@/components/app/coaching/triggers-panel";
+import { isManagement } from "@/lib/types/database";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -55,7 +56,7 @@ export default async function DriverCoachingPage({ params }: Props) {
         <CoachingSessionList
           sessions={sessions}
           driverName={driver.full_name}
-          isAdmin={me.role === "admin"}
+          isAdmin={isManagement(me.role)}
         />
       )}
     </div>

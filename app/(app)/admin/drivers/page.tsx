@@ -1,9 +1,9 @@
-import { requireRole } from "@/lib/auth/require-role";
+import { requireManagement } from "@/lib/auth/require-role";
 import { listDrivers } from "@/lib/queries/drivers";
 import { DriversAdmin } from "@/components/app/admin/drivers-admin";
 
 export default async function AdminDriversPage() {
-  await requireRole(["admin", "manager"]);
+  await requireManagement();
   const drivers = await listDrivers();
   return (
     <div className="space-y-4 max-w-6xl">

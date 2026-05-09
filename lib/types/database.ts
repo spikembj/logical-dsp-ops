@@ -11,7 +11,34 @@
  * Until then, this minimal shape is enough for middleware + auth helpers.
  */
 
-export type UserRole = "admin" | "manager" | "dispatcher";
+export type UserRole =
+  | "owner"
+  | "hr"
+  | "ops_manager"
+  | "dispatcher"
+  // Legacy values kept in the Postgres enum for compat. New rows should
+  // never use these — the management-roles migration migrated all existing
+  // 'admin' -> 'owner' and 'manager' -> 'ops_manager'.
+  | "admin"
+  | "manager";
+
+/**
+ * Roles that have management-tier write access (everything except dispatcher).
+ * Owner, HR, and Ops Manager are functionally identical permission-wise — the
+ * label is for org clarity. Legacy admin/manager values are included for
+ * defense in depth in case any old row slipped past the migration.
+ */
+export const MANAGEMENT_ROLES: UserRole[] = [
+  "owner",
+  "hr",
+  "ops_manager",
+  "admin",
+  "manager",
+];
+
+export function isManagement(role: UserRole | null | undefined): boolean {
+  return !!role && (MANAGEMENT_ROLES as string[]).includes(role);
+}
 export type DriverStatus = "active" | "loa" | "terminated" | "inactive";
 export type VehicleType = "cdv" | "edv" | "standard_parcel" | "rivian";
 export type DriverPosition = "driver" | "helper";

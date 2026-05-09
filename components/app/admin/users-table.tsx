@@ -33,10 +33,24 @@ import { formatSessionDate } from "@/lib/format/dates";
 import type { UserRole, UserRow } from "@/lib/types/database";
 
 const ROLES: { value: UserRole; label: string }[] = [
-  { value: "admin", label: "Admin" },
-  { value: "manager", label: "Manager" },
+  { value: "owner", label: "Owner" },
+  { value: "hr", label: "HR" },
+  { value: "ops_manager", label: "Ops Manager" },
   { value: "dispatcher", label: "Dispatcher" },
 ];
+
+/**
+ * Render any value (including legacy admin/manager from older rows) cleanly.
+ * Maps legacy values to the closest current label.
+ */
+const ROLE_LABEL: Record<UserRole, string> = {
+  owner: "Owner",
+  hr: "HR",
+  ops_manager: "Ops Manager",
+  dispatcher: "Dispatcher",
+  admin: "Owner",
+  manager: "Ops Manager",
+};
 
 export function UsersAdmin({
   users,

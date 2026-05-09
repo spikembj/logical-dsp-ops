@@ -1,6 +1,15 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { UserRole, UserRow } from "@/lib/types/database";
+import {
+  MANAGEMENT_ROLES,
+  type UserRole,
+  type UserRow,
+} from "@/lib/types/database";
+
+/** Convenience: gate a page to anyone with management-tier write access. */
+export function requireManagement() {
+  return requireRole(MANAGEMENT_ROLES);
+}
 
 type Me = Pick<UserRow, "id" | "email" | "full_name" | "role" | "active">;
 
@@ -55,5 +64,5 @@ export async function requireRole(allowed: UserRole[]): Promise<Me> {
  * role is allowed to view.
  */
 export async function requireUser() {
-  return requireRole(["admin", "manager", "dispatcher"]);
+  return requireRole(["owner", "hr", "ops_manager", "dispatcher", "admin", "manager"]);
 }

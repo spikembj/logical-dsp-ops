@@ -41,7 +41,9 @@ export default async function DashboardPage() {
     <div className="space-y-6 max-w-6xl">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Performance
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Hi {getFirstName(me)} —{" "}
             <span className="text-foreground font-medium">
