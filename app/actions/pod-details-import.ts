@@ -42,7 +42,7 @@ export async function importPodDetailsPdf(
   let parsed: ParsedPodDetails;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    parsed = await parsePodDetailsPdf(bytes);
+    parsed = await parsePodDetailsPdf(bytes, file.name);
   } catch (e) {
     console.error("parsePodDetailsPdf failed:", e);
     return {

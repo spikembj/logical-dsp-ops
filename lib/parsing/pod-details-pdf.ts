@@ -103,7 +103,10 @@ function groupRows(items: PdfTextItem[]): PdfTextItem[][] {
   return sortedKeys.map((k) => buckets.get(k)!.sort((a, b) => a.x - b.x));
 }
 
-function extractWeekYear(rows: PdfTextItem[][]): {
+function extractWeekYear(
+  rows: PdfTextItem[][],
+  fallbackFromFileName?: string,
+): {
   week: number;
   year: number;
   station: string | null;
@@ -125,13 +128,24 @@ function extractWeekYear(rows: PdfTextItem[][]): {
       if (m) year = Number(m[1]);
     }
     if (!station || !dsp) {
-      // "US - LGCL - DUT7 - Week 16"
       const m = text.match(/-\s*([A-Z]{2,5})\s*-\s*([A-Z]{2,5}\d?)\s*-/);
       if (m) {
         dsp = m[1];
         station = m[2];
       }
     }
+  }
+
+  // The POD Details PDF puts the year only in the filename
+  // (e.g. "US-LGCL-DUT7-Week16-2026NA-DA-POD-Details.pdf"), not the page
+  // text. Fall back to the filename when the in-PDF text doesn't have it.
+  if (!year && fallbackFromFileName) {
+    const m = fallbackFromFileName.match(/\b(20\d{2})\b/);
+    if (m) year = Number(m[1]);
+  }
+  if (!week && fallbackFromFileName) {
+    const m = fallbackFromFileName.match(/[Ww]eek[-_ ]?(\d+)/);
+    if (m) week = Number(m[1]);
   }
 
   if (!week || !year) {
@@ -187,6 +201,7 @@ function parseDriverRow(cells: string[]): ParsedPodDriver | null {
 
 export async function parsePodDetailsPdf(
   bytes: Uint8Array,
+  fileName?: string,
 ): Promise<ParsedPodDetails> {
   const items = await extractTextItems(bytes);
   if (items.length === 0) {
@@ -194,7 +209,7 @@ export async function parsePodDetailsPdf(
   }
 
   const rows = groupRows(items);
-  const header = extractWeekYear(rows);
+  const header = extractWeekYear(rows, fileName);
 
   const drivers: ParsedPodDriver[] = [];
   const seenTids = new Set<string>();
