@@ -15,7 +15,7 @@
 - Performance dashboard at `/`: stat tiles, needs-coaching hero list with Safety/Quality toggle, recent coaching activity
 - Performance tab on driver detail: Recharts multi-line trend (Overall/DCR/POD/FICO), wide metrics table grouped Standing/Volume/Safety/Quality, summary cards (POD reject breakdown, Concessions, Negative CDF)
 - Management page (`/admin/users`) — invite, role change, deactivate
-- Drivers admin (`/admin/drivers`) — CRUD with Driver/Helper position + Standard Parcel vehicle type
+- Employees page (`/admin/employees`) — CRUD with Driver/Helper position + Standard Parcel vehicle type
 
 **Last verified state:** the user confirmed POD Details import works, all 7 import sources have been tested, the Defects-tab→Performance-card consolidation is in place, the Recharts trend chart was just shipped.
 
@@ -55,7 +55,7 @@ Summary of where the original spec was extended/changed:
 ├── app/
 │   ├── (app)/
 │   │   ├── admin/
-│   │   │   ├── drivers/         # Drivers admin CRUD
+│   │   │   ├── employees/       # Employees page (driver+helper CRUD)
 │   │   │   └── users/           # Management page
 │   │   ├── drivers/
 │   │   │   ├── [id]/            # Driver detail (layout + 4 tabs)

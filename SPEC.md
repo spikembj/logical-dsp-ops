@@ -236,12 +236,12 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 **Right column:** Recent coaching — last 10 non-voided sessions across the DSP.
 
 ### 3. Drivers list (`/drivers`)
-Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated).
+Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.
 
 ### 4. Driver detail (`/drivers/[id]`)
 Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached.
 
-- **Profile:** read-only fields including Position. Editing happens via `/admin/drivers`.
+- **Profile:** read-only fields including Position. Editing happens via `/admin/employees`.
 - **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD / FICO with toggleable series) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).
 - **Safety events:** filterable list (default: last 30 days, impacting only). Toggle to show non-impacting.
 - **Coaching:** Triggers panel (Safety / Quality / Escalations) above the chronological session history. Each session shows session_type badge, coach, ack toggle. Edit / Void buttons (management only). "Show N voided" toggle when voided sessions exist.
@@ -264,8 +264,8 @@ Result card shows match counts and any errors. Driver matching: by transporter_i
 ### 7. Management (`/admin/users`)
 Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout.
 
-### 8. Drivers admin (`/admin/drivers`)
-Searchable + status-filterable list with per-row Edit dialog and Add driver dialog at the top. Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
+### 8. Employees (`/admin/employees`)
+Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision with the public-facing Drivers list). Searchable + status-filterable list with per-row Edit dialog and Add employee dialog at the top. Covers both drivers and helpers — Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
 
 ## Build Order
 
@@ -280,7 +280,7 @@ Searchable + status-filterable list with per-row Edit dialog and Add driver dial
    - ✅ Wave 2: Escalations CSV
    - ✅ Wave 3: Concessions CSV + CDF Negative CSV (also surfaced on Performance tab as summary cards instead of a separate Defects tab)
    - ✅ Wave 4: POD Details PDF (with reject-reason breakdown card on Performance tab)
-7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Drivers admin (CRUD with position + standard_parcel rename).
+7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Employees page (CRUD with position + standard_parcel rename).
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab. **Deferred items:** file-hash re-import detection, downloadable error CSVs, additional empty-state refinement (the existing ones already explain themselves).
 
 ## Audit & Data Integrity Rules

@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, TierBadge } from "@/lib/format/badges";
+import { formatSessionDate, relativeFromNow } from "@/lib/format/dates";
 import type { DriverStatus } from "@/lib/types/database";
 import type { DriverListItem } from "@/lib/queries/drivers";
 import { Search, X } from "lucide-react";
@@ -144,7 +145,13 @@ export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
                     )}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                    —
+                    {d.latest_coached_at ? (
+                      <span title={formatSessionDate(d.latest_coached_at)}>
+                        {relativeFromNow(d.latest_coached_at)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
                     {d.approved_vehicle_types.length === 0
@@ -164,10 +171,6 @@ export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
         </Table>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Tier and last-coached columns will populate once scorecards (step 4)
-        and coaching (step 3) ship.
-      </p>
     </div>
   );
 }

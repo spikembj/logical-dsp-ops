@@ -51,7 +51,7 @@ export async function createDriver(
   const { error } = await supabase.from("drivers").insert(parsed.data);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/admin/drivers");
+  revalidatePath("/admin/employees");
   revalidatePath("/drivers");
   return { ok: true };
 }
@@ -71,7 +71,7 @@ export async function updateDriver(
     .eq("id", driver_id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/admin/drivers");
+  revalidatePath("/admin/employees");
   revalidatePath("/drivers");
   revalidatePath(`/drivers/${driver_id}`);
   return { ok: true };

@@ -15,6 +15,7 @@ export interface DriverListItem extends DriverRow {
   latest_tier: Tier | null;
   latest_overall_score: number | null;
   latest_week_ending: string | null;
+  latest_coached_at: string | null;
 }
 
 export interface LatestScorecard {
@@ -52,11 +53,35 @@ async function loadLatestScorecards(): Promise<Map<string, LatestScorecard>> {
 }
 
 /**
- * Fetch all drivers with their latest scorecard merged in. Sorted by name.
+ * Most recent non-voided coaching session per driver. Voided sessions are
+ * excluded so the column reflects actionable coaching history, not erased rows.
+ */
+async function loadLatestCoaching(): Promise<Map<string, string>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("coaching_sessions")
+    .select("driver_id, session_date")
+    .is("voided_at", null)
+    .order("session_date", { ascending: false });
+  if (error) {
+    console.error("loadLatestCoaching failed:", error);
+    return new Map();
+  }
+  const m = new Map<string, string>();
+  for (const s of data ?? []) {
+    const id = s.driver_id as string;
+    if (!m.has(id)) m.set(id, s.session_date as string);
+  }
+  return m;
+}
+
+/**
+ * Fetch all drivers with their latest scorecard + latest coaching merged in.
+ * Sorted by name.
  */
 export async function listDrivers(): Promise<DriverListItem[]> {
   const supabase = await createClient();
-  const [driversRes, latest] = await Promise.all([
+  const [driversRes, latest, latestCoaching] = await Promise.all([
     supabase
       .from("drivers")
       .select(
@@ -64,6 +89,7 @@ export async function listDrivers(): Promise<DriverListItem[]> {
       )
       .order("full_name", { ascending: true }),
     loadLatestScorecards(),
+    loadLatestCoaching(),
   ]);
 
   if (driversRes.error) {
@@ -78,6 +104,7 @@ export async function listDrivers(): Promise<DriverListItem[]> {
       latest_tier: ls?.tier ?? null,
       latest_overall_score: ls?.overall_score ?? null,
       latest_week_ending: ls?.week_ending ?? null,
+      latest_coached_at: latestCoaching.get(d.id) ?? null,
     };
   });
 }
