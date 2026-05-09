@@ -56,9 +56,6 @@ export default async function DriverPerformancePage({ params }: Props) {
   const cdfTypeBreakdown = [...cdfTypeCounts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
-  const cdfRecentComments = cdfRows
-    .filter((c) => c.feedback_details && c.feedback_details.trim() !== "")
-    .slice(0, 3);
 
   if (scorecards.length === 0) {
     return (
@@ -303,11 +300,10 @@ export default async function DriverPerformancePage({ params }: Props) {
         <section className="rounded-xl border bg-card p-4 space-y-3 md:col-span-2">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-medium">
-              Customer Delivery Feedback (negative)
+              Negative Customer Delivery Feedback
             </h3>
             <span className="text-xs text-muted-foreground">
-              {cdfRows.length} {cdfRows.length === 1 ? "comment" : "comments"}{" "}
-              on file
+              {cdfRows.length} {cdfRows.length === 1 ? "row" : "rows"} on file
             </span>
           </div>
           {cdfTypeBreakdown.length > 0 && (
@@ -323,26 +319,22 @@ export default async function DriverPerformancePage({ params }: Props) {
               ))}
             </ul>
           )}
-          {cdfRecentComments.length > 0 && (
-            <details className="text-sm">
-              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                Show recent comments ({cdfRecentComments.length})
-              </summary>
-              <ul className="mt-2 space-y-2">
-                {cdfRecentComments.map((c) => (
-                  <li
-                    key={c.id}
-                    className="border-l-2 border-muted pl-3 italic text-foreground/80"
-                  >
-                    “{c.feedback_details!.trim()}”
-                    <span className="block not-italic text-[11px] text-muted-foreground mt-0.5">
-                      {c.date.slice(0, 10)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
+          <ul className="border-t pt-2 text-sm divide-y">
+            {cdfRows.map((c) => (
+              <li
+                key={c.id}
+                className="flex items-baseline justify-between gap-3 py-1.5"
+              >
+                <code className="font-mono text-xs">{c.tracking_id}</code>
+                <time
+                  dateTime={c.date}
+                  className="text-xs text-muted-foreground tabular-nums"
+                >
+                  {formatSessionDate(c.date.slice(0, 10))}
+                </time>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       </div>
