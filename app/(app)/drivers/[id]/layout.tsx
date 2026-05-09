@@ -42,6 +42,11 @@ export default async function DriverLayout({ params, children }: Props) {
           <h1 className="text-2xl font-semibold tracking-tight">
             {driver.full_name}
           </h1>
+          {driver.position === "helper" && (
+            <span className="text-[10px] uppercase tracking-wider rounded bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-sky-500/30 px-1.5 py-0.5">
+              Helper
+            </span>
+          )}
           <StatusBadge status={driver.status} />
           <TierBadge tier={latest?.tier ?? null} />
           {latest?.overall_score !== null && latest?.overall_score !== undefined && (

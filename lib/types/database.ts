@@ -13,7 +13,8 @@
 
 export type UserRole = "admin" | "manager" | "dispatcher";
 export type DriverStatus = "active" | "loa" | "terminated" | "inactive";
-export type VehicleType = "cdv" | "edv" | "step_van" | "rivian";
+export type VehicleType = "cdv" | "edv" | "standard_parcel" | "rivian";
+export type DriverPosition = "driver" | "helper";
 export type Tier =
   | "fantastic_plus"
   | "fantastic"
@@ -52,6 +53,8 @@ export interface DriverRow {
   full_name: string;
   hire_date: string | null;
   status: DriverStatus;
+  /** "driver" (default) or "helper" — helpers ride along but don't drive. */
+  position: DriverPosition;
   approved_vehicle_types: VehicleType[];
   notes: string | null;
   created_at: string;
@@ -80,6 +83,7 @@ export interface Database {
       user_role: UserRole;
       driver_status: DriverStatus;
       vehicle_type: VehicleType;
+      driver_position: DriverPosition;
       tier: Tier;
       severity: Severity;
       import_type: ImportType;

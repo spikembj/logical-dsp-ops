@@ -60,7 +60,7 @@ export async function listDrivers(): Promise<DriverListItem[]> {
     supabase
       .from("drivers")
       .select(
-        "id, transporter_id, full_name, hire_date, status, approved_vehicle_types, notes, created_at, updated_at",
+        "id, transporter_id, full_name, hire_date, status, position, approved_vehicle_types, notes, created_at, updated_at",
       )
       .order("full_name", { ascending: true }),
     loadLatestScorecards(),
@@ -91,7 +91,7 @@ export const getDriverById = cache(
     const { data, error } = await supabase
       .from("drivers")
       .select(
-        "id, transporter_id, full_name, hire_date, status, approved_vehicle_types, notes, created_at, updated_at",
+        "id, transporter_id, full_name, hire_date, status, position, approved_vehicle_types, notes, created_at, updated_at",
       )
       .eq("id", id)
       .maybeSingle();

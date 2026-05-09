@@ -5,7 +5,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
 const StatusSchema = z.enum(["active", "loa", "terminated", "inactive"]);
-const VehicleSchema = z.enum(["cdv", "edv", "step_van", "rivian"]);
+const VehicleSchema = z.enum(["cdv", "edv", "standard_parcel", "rivian"]);
+const PositionSchema = z.enum(["driver", "helper"]);
 
 const CreateSchema = z.object({
   full_name: z.string().trim().min(1).max(120),
@@ -17,6 +18,7 @@ const CreateSchema = z.object({
     .or(z.literal(""))
     .transform((v) => (v && v.length > 0 ? v.toUpperCase() : null)),
   status: StatusSchema.default("active"),
+  position: PositionSchema.default("driver"),
   hire_date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")

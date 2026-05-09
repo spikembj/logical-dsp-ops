@@ -42,13 +42,33 @@ export default async function DriverProfilePage({ params }: Props) {
       value: <span className="capitalize">{driver.status}</span>,
     },
     {
+      label: "Position",
+      value:
+        driver.position === "helper" ? (
+          <span className="inline-flex items-center gap-1">
+            Helper
+            <span className="text-xs text-muted-foreground italic">
+              (rides along, doesn&rsquo;t drive)
+            </span>
+          </span>
+        ) : (
+          "Driver"
+        ),
+    },
+    {
       label: "Approved vehicles",
       value:
-        driver.approved_vehicle_types.length === 0 ? (
+        driver.position === "helper" ? (
+          <span className="text-muted-foreground">
+            N/A (helper, doesn&rsquo;t drive)
+          </span>
+        ) : driver.approved_vehicle_types.length === 0 ? (
           <span className="text-muted-foreground">None set</span>
         ) : (
           driver.approved_vehicle_types
-            .map((v) => v.replace("_", " ").toUpperCase())
+            .map((v) =>
+              v === "standard_parcel" ? "Standard Parcel" : v.toUpperCase(),
+            )
             .join(", ")
         ),
     },

@@ -115,9 +115,14 @@ export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
                   <TableCell className="font-medium">
                     <Link
                       href={`/drivers/${d.id}`}
-                      className="block py-1 hover:underline"
+                      className="inline-flex items-center gap-2 py-1 hover:underline"
                     >
                       {d.full_name}
+                      {d.position === "helper" && (
+                        <span className="text-[10px] uppercase tracking-wider rounded bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-sky-500/30 px-1.5 py-0.5">
+                          Helper
+                        </span>
+                      )}
                     </Link>
                   </TableCell>
                   <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
@@ -144,7 +149,13 @@ export function DriversTable({ drivers }: { drivers: DriverListItem[] }) {
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
                     {d.approved_vehicle_types.length === 0
                       ? "—"
-                      : d.approved_vehicle_types.join(", ").toUpperCase()}
+                      : d.approved_vehicle_types
+                          .map((v) =>
+                            v === "standard_parcel"
+                              ? "Standard Parcel"
+                              : v.toUpperCase(),
+                          )
+                          .join(", ")}
                   </TableCell>
                 </TableRow>
               ))

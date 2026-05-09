@@ -28,7 +28,12 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge } from "@/lib/format/badges";
 import { createDriver, updateDriver } from "@/app/actions/drivers";
-import type { DriverRow, DriverStatus, VehicleType } from "@/lib/types/database";
+import type {
+  DriverPosition,
+  DriverRow,
+  DriverStatus,
+  VehicleType,
+} from "@/lib/types/database";
 
 const STATUS_OPTIONS: { label: string; value: DriverStatus }[] = [
   { label: "Active", value: "active" },
@@ -39,8 +44,13 @@ const STATUS_OPTIONS: { label: string; value: DriverStatus }[] = [
 const VEHICLE_OPTIONS: { label: string; value: VehicleType }[] = [
   { label: "CDV", value: "cdv" },
   { label: "EDV", value: "edv" },
-  { label: "Step Van", value: "step_van" },
+  { label: "Standard Parcel", value: "standard_parcel" },
   { label: "Rivian", value: "rivian" },
+];
+
+const POSITION_OPTIONS: { label: string; value: DriverPosition }[] = [
+  { label: "Driver", value: "driver" },
+  { label: "Helper", value: "helper" },
 ];
 const STATUS_FILTERS: { label: string; value: DriverStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -138,7 +148,16 @@ export function DriversAdmin({ drivers }: { drivers: DriverRow[] }) {
             ) : (
               filtered.map((d) => (
                 <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.full_name}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      {d.full_name}
+                      {d.position === "helper" && (
+                        <span className="text-[10px] uppercase tracking-wider rounded bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-sky-500/30 px-1.5 py-0.5">
+                          Helper
+                        </span>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
                     {d.transporter_id ?? "—"}
                   </TableCell>
@@ -149,11 +168,17 @@ export function DriversAdmin({ drivers }: { drivers: DriverRow[] }) {
                     {d.hire_date ?? "—"}
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-                    {d.approved_vehicle_types.length === 0
+                    {d.position === "helper"
                       ? "—"
-                      : d.approved_vehicle_types
-                          .map((v) => v.replace("_", " ").toUpperCase())
-                          .join(", ")}
+                      : d.approved_vehicle_types.length === 0
+                        ? "—"
+                        : d.approved_vehicle_types
+                            .map((v) =>
+                              v === "standard_parcel"
+                                ? "Standard Parcel"
+                                : v.toUpperCase(),
+                            )
+                            .join(", ")}
                   </TableCell>
                   <TableCell className="text-right">
                     <DriverFormDialog mode="edit" driver={d} />
@@ -183,6 +208,7 @@ function DriverFormDialog(props: Props) {
         full_name: props.driver.full_name,
         transporter_id: props.driver.transporter_id ?? "",
         status: props.driver.status,
+        position: props.driver.position,
         hire_date: props.driver.hire_date ?? "",
         approved_vehicle_types: props.driver.approved_vehicle_types,
         notes: props.driver.notes ?? "",
@@ -191,6 +217,7 @@ function DriverFormDialog(props: Props) {
         full_name: "",
         transporter_id: "",
         status: "active" as DriverStatus,
+        position: "driver" as DriverPosition,
         hire_date: "",
         approved_vehicle_types: [] as VehicleType[],
         notes: "",
@@ -199,6 +226,7 @@ function DriverFormDialog(props: Props) {
   const [fullName, setFullName] = useState(initial.full_name);
   const [tid, setTid] = useState(initial.transporter_id);
   const [status, setStatus] = useState<DriverStatus>(initial.status);
+  const [position, setPosition] = useState<DriverPosition>(initial.position);
   const [hireDate, setHireDate] = useState(initial.hire_date);
   const [vehicles, setVehicles] = useState<VehicleType[]>(
     initial.approved_vehicle_types,
@@ -209,6 +237,7 @@ function DriverFormDialog(props: Props) {
     setFullName(initial.full_name);
     setTid(initial.transporter_id);
     setStatus(initial.status);
+    setPosition(initial.position);
     setHireDate(initial.hire_date);
     setVehicles(initial.approved_vehicle_types);
     setNotes(initial.notes);
@@ -231,8 +260,10 @@ function DriverFormDialog(props: Props) {
         full_name: fullName.trim(),
         transporter_id: tid.trim(),
         status,
+        position,
         hire_date: hireDate.trim(),
-        approved_vehicle_types: vehicles,
+        // Helpers don't drive — force vehicles empty regardless of UI state.
+        approved_vehicle_types: position === "helper" ? [] : vehicles,
         notes: notes.trim(),
       };
       const res = isEdit
@@ -321,34 +352,59 @@ function DriverFormDialog(props: Props) {
               </select>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="hire_date">Hire date</Label>
-            <Input
-              id="hire_date"
-              type="date"
-              value={hireDate}
-              onChange={(e) => setHireDate(e.currentTarget.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Approved vehicles</Label>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {VEHICLE_OPTIONS.map((v) => (
-                <label
-                  key={v.value}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Checkbox
-                    checked={vehicles.includes(v.value)}
-                    onCheckedChange={(c) =>
-                      toggleVehicle(v.value, Boolean(c))
-                    }
-                  />
-                  {v.label}
-                </label>
-              ))}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="position">Position</Label>
+              <select
+                id="position"
+                value={position}
+                onChange={(e) =>
+                  setPosition(e.currentTarget.value as DriverPosition)
+                }
+                className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                {POSITION_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hire_date">Hire date</Label>
+              <Input
+                id="hire_date"
+                type="date"
+                value={hireDate}
+                onChange={(e) => setHireDate(e.currentTarget.value)}
+              />
             </div>
           </div>
+          {position === "driver" ? (
+            <div className="space-y-2">
+              <Label>Approved vehicles</Label>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {VEHICLE_OPTIONS.map((v) => (
+                  <label
+                    key={v.value}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={vehicles.includes(v.value)}
+                      onCheckedChange={(c) =>
+                        toggleVehicle(v.value, Boolean(c))
+                      }
+                    />
+                    {v.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              Helpers ride along — vehicle approvals don&rsquo;t apply.
+            </p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
             <Textarea
