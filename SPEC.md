@@ -37,33 +37,40 @@ Long-term vision: a single tool that owns roster, performance, attendance, fleet
 | File storage | Supabase Storage | (planned) for CSV/PDF archive |
 | CSV parsing | PapaParse | Battle-tested |
 | PDF parsing | pdfjs-dist (legacy/Node build) | Works server-side; configured via `serverExternalPackages` |
-| Charts | Recharts | (planned for step 8 polish) |
+| Charts | Recharts | Multi-line trend chart on the per-driver Performance tab (last 12 weeks: Overall / DCR / POD / FICO) |
 | Hosting | Vercel | Free tier, zero-config Next.js deploys |
 
 > **Cost path:** $0 to start → ~$25/mo (Supabase Pro) → ~$45/mo (Vercel Pro) if needed.
 
 ## User Roles
 
+The Postgres enum is `owner | hr | ops_manager | dispatcher`, plus legacy `admin | manager` values still in the type for compat (no row uses them after the management-roles migration).
+
 | Role | Permissions |
 |---|---|
-| **Admin** | Everything — user management, driver CRUD, coaching edits/voids, all data |
-| **Manager** | View all data, log coaching sessions, upload imports, edit drivers |
-| **Dispatcher** | View driver list and profiles, log coaching sessions, no admin access |
+| **Owner** | Everything — management UI, driver CRUD, coaching edits/voids, imports, all data. |
+| **HR** | Same write access as Owner. Distinct label for org clarity. |
+| **Ops Manager** | Same write access as Owner. Distinct label for org clarity. |
+| **Dispatcher** | View everything. Can log + acknowledge coaching sessions. Cannot edit/void others' coaching, run imports, manage users/drivers. |
 
-Role is set by an admin when a teammate is invited. Stored on `users` table.
+> Owner / HR / Ops Manager are functionally identical permission-wise — the labels exist for org reporting. Dispatchers are the only restricted role.
+
+Role is set by management when a teammate is invited. Stored on `users` table. The SQL helper `is_management()` returns true for Owner/HR/Ops Manager (and legacy admin/manager) — used by every RLS policy that gates writes.
 
 **Coaching permissions** (refined during build):
 - *Create session*: any active user
-- *Acknowledge / unacknowledge*: any active user (via `set_coaching_acknowledged` RPC — bypasses RLS so non-admins can flip the toggle without being able to edit content)
-- *Edit content (topic / notes / date / type)*: admin only
-- *Void / unvoid*: admin only
+- *Acknowledge / unacknowledge*: any active user (via `set_coaching_acknowledged` RPC — bypasses RLS so dispatchers can flip the toggle without being able to edit content)
+- *Edit content (topic / notes / date / type)*: management only
+- *Void / unvoid*: management only
+
+> **Edge case noted in build:** some dispatchers also drive (e.g. Colby, Manuel, Athena). Today they have **two records linked by name** — a `public.users` row (dispatcher login) and a `public.drivers` row (driver record). No FK between them yet; future work could add an explicit link or "Also a driver" badge.
 
 ## Data Model
 
 ### `users`
 Internal team members.
 - `id` (uuid, PK, links to Supabase `auth.users`)
-- `email`, `full_name`, `role` (admin / manager / dispatcher), `active` (bool), `created_at`
+- `email`, `full_name`, `role` (owner / hr / ops_manager / dispatcher; legacy admin/manager values exist), `active` (bool), `created_at`
 
 ### `drivers`
 - `id` (uuid, PK)
@@ -71,7 +78,8 @@ Internal team members.
 - `full_name`
 - `hire_date` (date, nullable)
 - `status` (enum: **active / loa / terminated / inactive**)
-- `approved_vehicle_types` (`vehicle_type[]` — cdv / edv / step_van / rivian)
+- `position` (enum: **driver / helper**, default `driver`) — helpers ride along but don't drive any vehicle.
+- `approved_vehicle_types` (`vehicle_type[]` — `cdv / edv / standard_parcel / rivian`). Ignored when `position = helper`.
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
 
@@ -145,20 +153,49 @@ Unique on (`driver_id`, `incident_date`, `behavior`, `bucket`); re-imports upser
 `id`, `coaching_session_id` (FK, cascade delete), `edited_by`, `edited_at`, `previous_values` (jsonb).
 
 ### `file_imports`  *(was `csv_imports` in the original spec)*
-Renamed because not all imports are CSVs (Scorecard PDF, future POD Details PDF).
+Renamed because not all imports are CSVs (Scorecard PDF, POD Details PDF).
 - `id`, `uploaded_by`
 - `import_type` (enum: **scorecard / netradyne / escalations / cdf / concessions / pod_details**)
 - `file_name`, `file_hash` (nullable), `row_count`, `success_count`, `error_count`, `errors` (jsonb), `created_at`
 
-> Re-import detection by `file_hash` is **deferred to step 8 polish.**
+> The `file_hash` column exists; populating it + warning on duplicate uploads is **deferred** (low ops impact for the small team using the app).
+
+### `concessions`
+**One row per individual package concession** (defect on a single delivery). Sourced from the DSP Delivery Concessions CSV. The `impacts_dsb` flag identifies concessions that count toward the DSB metric on the weekly scorecard — these provide the per-package detail behind the DSB Count quality trigger.
+- `id`, `driver_id`, `tracking_id` (TBA…), `concession_date`
+- `pickup_date`, `delivery_attempt_date`, `delivery_date` (all nullable)
+- `delivery_type`, `service_area`, `dsp_name`
+- `impacts_dsb` (bool), `defect_types` (text[] — set of flagged categories)
+- `raw_data`, `imported_from`, `notes`, `created_at`
+
+Unique on (`driver_id`, `tracking_id`); re-imports upsert.
+
+### `cdf_negative`
+**One row per individual negative customer comment.** Sourced from daily/weekly CDF Negative CSVs (same parser handles both).
+- `id`, `driver_id`, `tracking_id`, `delivery_group_id`, `delivery_date`
+- `feedback_details` (text — verbatim comment, nullable)
+- `feedback_types` (text[] — set of flagged categories: Mishandled / Unprofessional / Wrong Address / etc.)
+- `raw_data`, `imported_from`, `notes`, `created_at`
+
+Unique on (`driver_id`, `tracking_id`); re-imports upsert.
+
+### `pod_details`
+**One row per driver per week** with the Photo-On-Delivery acceptance breakdown. Adds the per-reason reject detail that the scorecard PDF doesn't expose.
+- `id`, `driver_id`, `week_ending`
+- Totals: `opportunities`, `success`, `bypass`, `rejects`
+- Reject reasons (9 columns): `blurry_photo`, `package_in_car`, `package_in_hand`, `package_too_close`, `photo_too_dark`, `human_in_picture`, `package_not_clearly_visible`, `no_package_detected`, `other_reject`
+- `raw_data`, `imported_from`, `created_at`
+
+Unique on (`driver_id`, `week_ending`); re-imports upsert.
 
 ## Helper SQL functions
 
 - `current_user_role()` (security definer) — reads caller's role for use in RLS.
 - `is_active_user()` (security definer) — boolean, used in RLS predicates.
+- `is_management()` (security definer) — true for owner / hr / ops_manager (and legacy admin / manager). Drives every RLS policy that gates writes on management-tier access.
 - `set_updated_at()` — generic trigger for tables with `updated_at`.
 - `log_coaching_session_revision()` — trigger on `coaching_sessions` UPDATE.
-- `set_coaching_acknowledged(uuid, boolean)` (security definer, granted to authenticated) — lets non-admins flip the acknowledged toggle without write access to the rest of the row.
+- `set_coaching_acknowledged(uuid, boolean)` (security definer, granted to authenticated) — lets dispatchers flip the acknowledged toggle without write access to the rest of the row.
 - `refresh_driver_active_status()` (security definer, returns activated_count + deactivated_count) — bidirectional: drivers with no recent activity in 60 days flip from `active` → `inactive`; drivers who reappear in scorecards/events flip back. Called automatically at the end of every import action.
 
 ## Coaching Triggers (who needs coaching)
@@ -183,7 +220,9 @@ A driver "needs coaching this week" if any of these are true and they haven't be
 ### 1. Login (`/login`)
 Email + password (Supabase Auth). Inactive users blocked. Header includes a soft card.
 
-### 2. Dashboard (`/`)
+### 2. Performance dashboard (`/`)
+Title: **Performance**. (App will host multiple dashboards over time — Ops, HR, Fleet — so the home dashboard is named for what it covers, not generic "Dashboard".)
+
 Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current calendar week. If imported data lags today, header appends "(data through {date})".
 
 **Stat tiles (4):**
@@ -197,34 +236,36 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 **Right column:** Recent coaching — last 10 non-voided sessions across the DSP.
 
 ### 3. Drivers list (`/drivers`)
-Searchable, sortable table. Columns: Name / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated).
+Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated).
 
 ### 4. Driver detail (`/drivers/[id]`)
-Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, status badge, tier badge (from latest scorecard), overall score, last coached.
+Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached.
 
-- **Profile:** read-only fields. Editing in step 7.
-- **Performance:** wide table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Trend chart deferred to step 8.
+- **Profile:** read-only fields including Position. Editing happens via `/admin/drivers`.
+- **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD / FICO with toggleable series) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).
 - **Safety events:** filterable list (default: last 30 days, impacting only). Toggle to show non-impacting.
-- **Coaching:** Triggers panel (Safety / Quality / Escalations) above the chronological session history. Each session shows session_type badge, coach, ack toggle. Edit / Void buttons (admin only). "Show N voided" toggle when voided sessions exist.
+- **Coaching:** Triggers panel (Safety / Quality / Escalations) above the chronological session history. Each session shows session_type badge, coach, ack toggle. Edit / Void buttons (management only). "Show N voided" toggle when voided sessions exist.
 
 ### 5. Log coaching session (modal)
-Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning / Termination), topic, notes, acknowledged toggle. Save creates immutable session record. Edit mode uses same dialog (admin only).
+Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning / Termination), topic, notes, acknowledged toggle. Save creates immutable session record. Edit mode uses same dialog (management only).
 
 ### 6. Import (`/import`)
-Tabs:
-- **DSP Overview (CSV)** — *primary scorecard source going forward.* Includes per-driver tier + overall_score.
-- **Scorecard (PDF)** — fallback if only the PDF is available; same destination table.
-- **Netradyne (CSV)** — aggregated event counts per driver.
+Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.
+- **DSP Overview (CSV)** — *primary scorecard source going forward.* Per-driver tier + overall_score + every metric.
+- **Scorecard (PDF)** — fallback when the CSV isn't available; same destination table.
+- **Netradyne (CSV)** — aggregated event counts; wipe-and-replace by (`source`, `event_date`).
 - **Escalations (CSV)** — Amazon-issued infractions.
-- *(planned waves 3–4)* CDF Negative, Concessions, POD Details.
+- **Concessions (CSV)** — per-package delivery defects.
+- **CDF Negative (CSV)** — per-package customer feedback (handles daily and weekly exports).
+- **POD Details (PDF)** — photo-on-delivery acceptance breakdown by reject reason. Year falls back to filename when missing in PDF text.
 
-Drag-and-drop. Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows.
+Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows.
 
-### 7. Admin — Users (`/admin/users`)
-Invite, set role, deactivate. *Stubbed; full UI in step 7.*
+### 7. Management (`/admin/users`)
+Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout.
 
-### 8. Admin — Drivers (`/admin/drivers`)
-Bulk add, edit any field, change status. *Stubbed; full UI in step 7.*
+### 8. Drivers admin (`/admin/drivers`)
+Searchable + status-filterable list with per-row Edit dialog and Add driver dialog at the top. Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
 
 ## Build Order
 
@@ -233,14 +274,14 @@ Bulk add, edit any field, change status. *Stubbed; full UI in step 7.*
 3. ✅ Coaching: create + edit + void + history + per-session type.
 4. ✅ Scorecard PDF import + Performance tab.
 5. ✅ Netradyne CSV import + Safety events tab.
-6. ✅ Dashboard (Quality tier breakdown deferred until DSP Overview CSV — landed in 6.5).
-6. **6.5. Additional imports** *(in progress — extends the spec):*
-   - ✅ Wave 1: DSP Overview Dashboard CSV (lights up per-driver tier + overall_score)
+6. ✅ Performance dashboard (renamed from "Dashboard" — first of several future dashboards: Ops, Fleet, HR).
+6. ✅ **6.5. Additional imports** *(extends the original spec):*
+   - ✅ Wave 1: DSP Overview Dashboard CSV
    - ✅ Wave 2: Escalations CSV
-   - ⏳ Wave 3: CDF Negative + Concessions CSVs
-   - ⏳ Wave 4: POD Details PDF
-7. ⏳ Admin — users & drivers (proper CRUD).
-8. ⏳ Polish: Recharts trends, file-hash re-import detection, downloadable error CSVs, empty/error states, refinement.
+   - ✅ Wave 3: Concessions CSV + CDF Negative CSV (also surfaced on Performance tab as summary cards instead of a separate Defects tab)
+   - ✅ Wave 4: POD Details PDF (with reject-reason breakdown card on Performance tab)
+7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Drivers admin (CRUD with position + standard_parcel rename).
+8. ✅ Polish: Recharts multi-line trend chart on Performance tab. **Deferred items:** file-hash re-import detection, downloadable error CSVs, additional empty-state refinement (the existing ones already explain themselves).
 
 ## Audit & Data Integrity Rules
 
@@ -255,12 +296,18 @@ Bulk add, edit any field, change status. *Stubbed; full UI in step 7.*
 - Amazon DSP weeks are Sunday-through-Saturday. Helpers: `amazonWeekEnding(week, year)` and `amazonWeekFromEndingDate(weekEnding)` in `lib/format/dates.ts`.
 - pdfjs-dist is marked as a serverExternalPackage in `next.config.ts` so the Node build's worker file resolves at runtime.
 
-## Open Questions / Deferred
+## Future / Out of Phase 1
 
-- **File-hash re-import detection** — deferred to step 8.
-- **Linked scorecard / event UI on coaching sessions** — schema supports it; no UI yet.
-- **Recharts trend lines on the Performance tab** — deferred to step 8.
-- **Per-tab views on the driver detail beyond what's shipped** — none planned.
+The user has flagged these as planned future scope, not part of Phase 1:
+- **More dashboards:** Ops & daily planning, Fleet tracking, HR (onboarding/offboarding). Each will sit at its own `/<dashboard>` route. The current home dashboard is intentionally named **Performance** for that reason.
+- **Dispatcher ↔ driver linkage:** some dispatchers also drive routes (Colby, Manuel, Athena). Today they're two unlinked records (one in `users`, one in `drivers`). Future: explicit FK or a "Has a driver record" badge on the management page.
+
+## Deferred
+
+Schema and code support these but the UX hasn't shipped:
+- **File-hash re-import detection** — `file_imports.file_hash` exists; helper `lib/parsing/file-hash.ts` exists; not wired into actions. Low ops impact for the current team size.
+- **Linked scorecard / event UI on coaching sessions** — `coaching_sessions.linked_scorecard_id` and `linked_event_ids` exist; no picker UI yet.
+- **Downloadable error CSVs** — errors are stored in `file_imports.errors` JSONB; UI shows a collapsible list but no download.
 
 ## Out of Scope (Phase 1)
 

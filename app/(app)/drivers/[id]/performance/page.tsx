@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { TierBadge } from "@/lib/format/badges";
 import type { Tier } from "@/lib/types/database";
+import { PerformanceTrendChart } from "@/components/app/perf/trend-chart";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -86,11 +87,12 @@ export default async function DriverPerformancePage({ params }: Props) {
     "relative before:absolute before:left-0 before:inset-y-1.5 before:w-px before:bg-foreground/15 before:content-['']";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <PerformanceTrendChart scorecards={scorecards} />
+
       <p className="text-xs text-muted-foreground">
         {scorecards.length} {scorecards.length === 1 ? "week" : "weeks"} on
-        record. Scroll horizontally for all metrics. Trend chart ships in
-        build order step&nbsp;8.
+        record. Scroll horizontally for all metrics.
       </p>
       <div className="rounded-md border overflow-x-auto">
         <Table>
