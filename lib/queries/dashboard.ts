@@ -2,10 +2,19 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { evaluateScorecard, QUALITY_THRESHOLDS } from "@/lib/queries/coaching-triggers";
+import type { Tier } from "@/lib/types/database";
 
 // Re-export the thresholds so the dashboard page can show them in the
 // helper text.
 export { QUALITY_THRESHOLDS };
+
+/**
+ * Minimum packages delivered in a week for a driver to qualify for the
+ * dashboard leaderboards. ~one full route. Drivers who only ran a partial
+ * day or a half-route have artificially loud DPMO numbers; we exclude
+ * them so the leaderboards reflect real operational performance.
+ */
+export const MIN_LEADERBOARD_DELIVERIES = 400;
 
 /**
  * Server queries powering the dashboard. Everything is cached per request
@@ -161,6 +170,165 @@ export const getCompanyTrend = cache(
       .sort((a, b) => (a.week_ending < b.week_ending ? -1 : 1))
       .slice(-12); // newest 12 weeks
     return points;
+  },
+);
+
+export interface LeaderboardRow {
+  driver_id: string;
+  full_name: string;
+  tier: Tier | null;
+  overall_score: number;
+  delivered: number;
+}
+
+export interface MostImprovedRow {
+  driver_id: string;
+  full_name: string;
+  current_score: number;
+  prior_score: number;
+  delta: number;
+}
+
+export interface DashboardLeaderboards {
+  latestWeekEnding: string | null;
+  priorWeekEnding: string | null;
+  top: LeaderboardRow[];
+  bottom: LeaderboardRow[];
+  mostImproved: MostImprovedRow[];
+  minDeliveries: number;
+}
+
+/**
+ * Top 5 / Bottom 5 / Most improved leaderboards for the home dashboard.
+ *
+ * Eligibility (Top + Bottom): latest scorecard week, delivered >= 400,
+ * driver.status = 'active'. Bottom 5 is "everyone meeting the threshold,
+ * sorted up" — not filtered by whether the driver was coached this week.
+ *
+ * Most improved: same active + 400-pkg floor applied to *both* weeks
+ * (latest and the one before). Sorted by score delta desc; only positive
+ * deltas show. Top 3 returned. If nobody actually improved, we return an
+ * empty array (the UI renders an empty state).
+ *
+ * Ties broken by full_name asc so the ordering is stable run-to-run.
+ */
+export const getDashboardLeaderboards = cache(
+  async (): Promise<DashboardLeaderboards> => {
+    const supabase = await createClient();
+    // 1. Find the latest week we have any scorecard for.
+    const { data: latestWk } = await supabase
+      .from("scorecards")
+      .select("week_ending")
+      .order("week_ending", { ascending: false })
+      .limit(1);
+    const latestWeek = latestWk?.[0]?.week_ending as string | undefined;
+    if (!latestWeek) {
+      return {
+        latestWeekEnding: null,
+        priorWeekEnding: null,
+        top: [],
+        bottom: [],
+        mostImproved: [],
+        minDeliveries: MIN_LEADERBOARD_DELIVERIES,
+      };
+    }
+    // Amazon weeks are Sun-Sat; the prior week ends 7 days earlier.
+    const priorDate = new Date(`${latestWeek}T00:00:00Z`);
+    priorDate.setUTCDate(priorDate.getUTCDate() - 7);
+    const priorWeek = priorDate.toISOString().slice(0, 10);
+
+    // 2. Pull both weeks' qualifying scorecards + the active-driver set.
+    const [latestRes, priorRes, driversRes] = await Promise.all([
+      supabase
+        .from("scorecards")
+        .select("driver_id, overall_score, delivered, tier")
+        .eq("week_ending", latestWeek)
+        .gte("delivered", MIN_LEADERBOARD_DELIVERIES)
+        .not("overall_score", "is", null),
+      supabase
+        .from("scorecards")
+        .select("driver_id, overall_score, delivered")
+        .eq("week_ending", priorWeek)
+        .gte("delivered", MIN_LEADERBOARD_DELIVERIES)
+        .not("overall_score", "is", null),
+      supabase
+        .from("drivers")
+        .select("id, full_name")
+        .eq("status", "active"),
+    ]);
+
+    const activeDrivers = new Map<string, { full_name: string }>();
+    for (const d of driversRes.data ?? []) {
+      activeDrivers.set(d.id as string, {
+        full_name: d.full_name as string,
+      });
+    }
+
+    // 3. Build the leaderboard candidate pool: latest week × active drivers.
+    const candidates: LeaderboardRow[] = [];
+    for (const sc of latestRes.data ?? []) {
+      const did = sc.driver_id as string;
+      const drv = activeDrivers.get(did);
+      if (!drv) continue;
+      candidates.push({
+        driver_id: did,
+        full_name: drv.full_name,
+        tier: (sc.tier as Tier | null) ?? null,
+        overall_score: sc.overall_score as number,
+        delivered: sc.delivered as number,
+      });
+    }
+
+    // Top 5 — highest first; tie-break by name asc.
+    const byScoreDesc = [...candidates].sort((a, b) =>
+      b.overall_score !== a.overall_score
+        ? b.overall_score - a.overall_score
+        : a.full_name.localeCompare(b.full_name),
+    );
+    const top = byScoreDesc.slice(0, 5);
+
+    // Bottom 5 — lowest first; tie-break by name asc.
+    const byScoreAsc = [...candidates].sort((a, b) =>
+      a.overall_score !== b.overall_score
+        ? a.overall_score - b.overall_score
+        : a.full_name.localeCompare(b.full_name),
+    );
+    const bottom = byScoreAsc.slice(0, 5);
+
+    // 4. Most improved — intersect with prior-week scores.
+    const priorScores = new Map<string, number>();
+    for (const sc of priorRes.data ?? []) {
+      priorScores.set(sc.driver_id as string, sc.overall_score as number);
+    }
+    const improved: MostImprovedRow[] = [];
+    for (const c of candidates) {
+      const prior = priorScores.get(c.driver_id);
+      if (prior === undefined) continue;
+      const delta = +(c.overall_score - prior).toFixed(2);
+      if (delta <= 0) continue; // "improved" means positive movement only
+      improved.push({
+        driver_id: c.driver_id,
+        full_name: c.full_name,
+        current_score: c.overall_score,
+        prior_score: prior,
+        delta,
+      });
+    }
+    improved.sort((a, b) =>
+      b.delta !== a.delta
+        ? b.delta - a.delta
+        : a.full_name.localeCompare(b.full_name),
+    );
+    const mostImproved = improved.slice(0, 3);
+
+    return {
+      latestWeekEnding: latestWeek,
+      priorWeekEnding: priorWeek,
+      top,
+      bottom,
+      mostImproved,
+      minDeliveries: MIN_LEADERBOARD_DELIVERIES,
+    };
   },
 );
 

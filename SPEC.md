@@ -233,6 +233,10 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 
 **Company trend chart:** Multi-series line chart of weekly company performance over the last 12 amazon weeks. Series: Overall / DCR / POD. Simple unweighted average across all drivers who have a scorecard that week — no minimum-volume filter and no current-status filter (a driver terminated today still contributed to past weeks). Volume-weighting deliberately avoided so the displayed averages don't diverge from Amazon's DSP Overview.
 
+**Leaderboards (3 cards):** Top 5 / Most improved / Bottom 5, all derived from the latest scorecard week.
+- *Top 5 / Bottom 5*: drivers with `delivered ≥ 400` packages that week and `status = 'active'`, sorted by `overall_score` (desc / asc respectively). Ties broken by name asc. Bottom 5 is informational — it includes everyone meeting the threshold regardless of whether they were coached this week.
+- *Most improved (top 3)*: same 400-pkg + active filter applied to **both** the latest week and the week before; ranked by positive score delta. Drivers who got worse are excluded by design. Empty state when nobody improved or there's only one week of data.
+
 **Hero list:** "Needs coaching this week" with Safety/Quality toggle (counts shown as pill chips), Show-N picker (15/30/50/All, default 15), whole section collapsible, inline `Log session` button per row that opens the same dialog used on the Coaching tab.
 
 **Right column:** Recent coaching — last 10 non-voided sessions across the DSP.

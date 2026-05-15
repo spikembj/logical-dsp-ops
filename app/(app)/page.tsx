@@ -1,11 +1,16 @@
 import { format } from "date-fns";
 import { requireUser } from "@/lib/auth/require-role";
-import { getDashboardData, getCompanyTrend } from "@/lib/queries/dashboard";
+import {
+  getDashboardData,
+  getCompanyTrend,
+  getDashboardLeaderboards,
+} from "@/lib/queries/dashboard";
 import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
 import { SplitStatTile } from "@/components/app/dashboard/split-stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
 import { RecentActivity } from "@/components/app/dashboard/recent-activity";
+import { Leaderboards } from "@/components/app/dashboard/leaderboards";
 import { PerformanceTrendChart } from "@/components/app/perf/trend-chart";
 
 /** First name from full_name; falls back to "there" if it's an email. */
@@ -34,9 +39,10 @@ function currentAmazonWeek(d: Date): { week: number; year: number } {
 
 export default async function DashboardPage() {
   const me = await requireUser();
-  const [data, companyTrend] = await Promise.all([
+  const [data, companyTrend, leaderboards] = await Promise.all([
     getDashboardData(),
     getCompanyTrend(),
+    getDashboardLeaderboards(),
   ]);
   const today = new Date();
   const { week, year } = currentAmazonWeek(today);
@@ -116,6 +122,9 @@ export default async function DashboardPage() {
           description={companyTrendDescription}
         />
       </section>
+
+      {/* Leaderboards: Top 5 / Most improved / Bottom 5 */}
+      <Leaderboards {...leaderboards} />
 
       {/* Two-column body: hero list + recent activity */}
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
