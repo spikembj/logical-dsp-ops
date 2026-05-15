@@ -37,7 +37,7 @@ Long-term vision: a single tool that owns roster, performance, attendance, fleet
 | File storage | Supabase Storage | (planned) for CSV/PDF archive |
 | CSV parsing | PapaParse | Battle-tested |
 | PDF parsing | pdfjs-dist (legacy/Node build) + `@napi-rs/canvas` polyfill | Legacy build runs in Node; the canvas package provides `DOMMatrix`/`Path2D`/`ImageData` on Vercel's stricter Node runtime (see `lib/parsing/pdfjs-node-polyfill.ts`). Both packages are `serverExternalPackages`. |
-| Charts | Recharts | Multi-line trend chart on the per-driver Performance tab (last 12 weeks: Overall / DCR / POD / FICO) |
+| Charts | Recharts | Multi-line trend chart, shared by the per-driver Performance tab and the home Performance dashboard's company-wide trend (last 12 weeks: Overall / DCR / POD) |
 | Hosting | Vercel | Free tier, zero-config Next.js deploys |
 
 > **Cost path:** $0 to start → ~$25/mo (Supabase Pro) → ~$45/mo (Vercel Pro) if needed.
@@ -231,6 +231,8 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 - Coaching sessions — this week.
 - Needs coaching — equal-split SplitStatTile: Safety on the left, Quality on the right.
 
+**Company trend chart:** Multi-series line chart of weekly company performance over the last 12 amazon weeks. Series: Overall / DCR / POD. Simple unweighted average across all drivers who have a scorecard that week — no minimum-volume filter and no current-status filter (a driver terminated today still contributed to past weeks). Volume-weighting deliberately avoided so the displayed averages don't diverge from Amazon's DSP Overview.
+
 **Hero list:** "Needs coaching this week" with Safety/Quality toggle (counts shown as pill chips), Show-N picker (15/30/50/All, default 15), whole section collapsible, inline `Log session` button per row that opens the same dialog used on the Coaching tab.
 
 **Right column:** Recent coaching — last 10 non-voided sessions across the DSP.
@@ -242,7 +244,7 @@ Searchable, sortable table. Columns: Name (with **Helper** badge when applicable
 Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached.
 
 - **Profile:** read-only fields including Position. Editing happens via `/admin/employees`.
-- **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD / FICO with toggleable series) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).
+- **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD with toggleable series; FICO is captured in scorecards but intentionally not charted) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).
 - **Safety events:** filterable list (default: last 30 days, impacting only). Toggle to show non-impacting.
 - **Coaching:** Triggers panel (Safety / Quality / Escalations) above the chronological session history. Each session shows session_type badge, coach, ack toggle. Edit / Void buttons (management only). "Show N voided" toggle when voided sessions exist.
 

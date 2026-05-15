@@ -1,11 +1,12 @@
 import { format } from "date-fns";
 import { requireUser } from "@/lib/auth/require-role";
-import { getDashboardData } from "@/lib/queries/dashboard";
+import { getDashboardData, getCompanyTrend } from "@/lib/queries/dashboard";
 import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
 import { SplitStatTile } from "@/components/app/dashboard/split-stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
 import { RecentActivity } from "@/components/app/dashboard/recent-activity";
+import { PerformanceTrendChart } from "@/components/app/perf/trend-chart";
 
 /** First name from full_name; falls back to "there" if it's an email. */
 function getFirstName(profile: { full_name: string | null; email: string }) {
@@ -33,9 +34,16 @@ function currentAmazonWeek(d: Date): { week: number; year: number } {
 
 export default async function DashboardPage() {
   const me = await requireUser();
-  const data = await getDashboardData();
+  const [data, companyTrend] = await Promise.all([
+    getDashboardData(),
+    getCompanyTrend(),
+  ]);
   const today = new Date();
   const { week, year } = currentAmazonWeek(today);
+  const companyTrendDescription =
+    companyTrend.length === 0
+      ? "No weeks on record."
+      : `Avg across ${companyTrend[companyTrend.length - 1]!.driver_count} drivers in latest week · last ${companyTrend.length} weeks.`;
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -97,6 +105,15 @@ export default async function DashboardPage() {
             value: data.stats.needsQualityCount,
             accent: data.stats.needsQualityCount > 0 ? "warn" : "good",
           }}
+        />
+      </section>
+
+      {/* Company-wide performance trend (12 weeks, simple avg) */}
+      <section>
+        <PerformanceTrendChart
+          scorecards={companyTrend}
+          title="Company trend"
+          description={companyTrendDescription}
         />
       </section>
 

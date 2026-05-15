@@ -74,6 +74,96 @@ async function resolveWindow(): Promise<DashboardWindow> {
 // lib/queries/coaching-triggers.ts so the per-driver coaching tab
 // shares them.
 
+export interface CompanyTrendPoint {
+  week_ending: string;
+  overall_score: number | null;
+  dcr: number | null;
+  pod: number | null;
+  driver_count: number; // sample size for the week (info only)
+}
+
+/**
+ * Weekly company averages for the last 12 amazon weeks on record.
+ *
+ * Simple unweighted average across every driver who has a scorecard that
+ * week — no minimum-volume filter, no current-status filter (a driver
+ * terminated today still contributed to past weeks). We deliberately don't
+ * volume-weight the average; Amazon's own DSP Overview doesn't either, so
+ * weighting here would diverge from what the user sees in Amazon.
+ *
+ * Per-metric averages skip nulls independently — a driver missing a DCR
+ * value doesn't drag down DCR's denominator, but they still count toward
+ * Overall if they have one. driver_count is "how many drivers had any
+ * scorecard data this week" for informational display.
+ */
+export const getCompanyTrend = cache(
+  async (): Promise<CompanyTrendPoint[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("scorecards")
+      .select("week_ending, overall_score, dcr, pod")
+      .order("week_ending", { ascending: false });
+    if (error) {
+      console.error("getCompanyTrend failed:", error);
+      return [];
+    }
+
+    interface Accum {
+      overallSum: number;
+      overallCount: number;
+      dcrSum: number;
+      dcrCount: number;
+      podSum: number;
+      podCount: number;
+      driverCount: number;
+    }
+    const byWeek = new Map<string, Accum>();
+    for (const r of data ?? []) {
+      const wk = r.week_ending as string;
+      if (!byWeek.has(wk)) {
+        byWeek.set(wk, {
+          overallSum: 0,
+          overallCount: 0,
+          dcrSum: 0,
+          dcrCount: 0,
+          podSum: 0,
+          podCount: 0,
+          driverCount: 0,
+        });
+      }
+      const a = byWeek.get(wk)!;
+      a.driverCount += 1;
+      if (r.overall_score !== null && r.overall_score !== undefined) {
+        a.overallSum += r.overall_score;
+        a.overallCount += 1;
+      }
+      if (r.dcr !== null && r.dcr !== undefined) {
+        a.dcrSum += r.dcr;
+        a.dcrCount += 1;
+      }
+      if (r.pod !== null && r.pod !== undefined) {
+        a.podSum += r.pod;
+        a.podCount += 1;
+      }
+    }
+
+    const points: CompanyTrendPoint[] = [...byWeek.entries()]
+      .map(([week_ending, a]) => ({
+        week_ending,
+        overall_score:
+          a.overallCount > 0
+            ? +(a.overallSum / a.overallCount).toFixed(2)
+            : null,
+        dcr: a.dcrCount > 0 ? +(a.dcrSum / a.dcrCount).toFixed(2) : null,
+        pod: a.podCount > 0 ? +(a.podSum / a.podCount).toFixed(2) : null,
+        driver_count: a.driverCount,
+      }))
+      .sort((a, b) => (a.week_ending < b.week_ending ? -1 : 1))
+      .slice(-12); // newest 12 weeks
+    return points;
+  },
+);
+
 export const getDashboardData = cache(async () => {
   const supabase = await createClient();
   const win = await resolveWindow();
