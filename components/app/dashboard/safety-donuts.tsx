@@ -43,33 +43,23 @@ interface RowItem {
  * share that window.
  */
 export function SafetyEventDonuts({ mix }: { mix: SafetyMix }) {
-  const rangeLabel =
-    mix.weekStart && mix.weekEnd
-      ? `Week of ${format(parseISO(mix.weekStart), "MMM d")} – ${format(parseISO(mix.weekEnd), "MMM d")}`
-      : "No safety data yet";
+  const startLabel = format(parseISO(mix.rangeStart), "MMM d");
+  const endLabel = format(parseISO(mix.rangeEnd), "MMM d");
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-base font-medium">Safety event mix</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {rangeLabel}
-          {mix.hasData && (
-            <>
-              {" "}
-              <span className="text-muted-foreground/70">
-                · from your latest Netradyne upload
-              </span>
-            </>
-          )}
+          Rolling last 7 days · {startLabel} – {endLabel}
         </p>
       </div>
       {!mix.hasData ? (
         <div className="rounded-xl border bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            No safety events on file yet.
+            No safety events in the last 7 days.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Upload a Netradyne CSV on the{" "}
+            Upload today&apos;s Netradyne CSV on the{" "}
             <a
               href="/import"
               className="underline-offset-4 hover:underline text-foreground"
