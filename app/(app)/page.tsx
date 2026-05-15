@@ -4,6 +4,7 @@ import {
   getDashboardData,
   getCompanyTrend,
   getDashboardLeaderboards,
+  getSafetyEventMix,
 } from "@/lib/queries/dashboard";
 import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
@@ -11,6 +12,7 @@ import { SplitStatTile } from "@/components/app/dashboard/split-stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
 import { RecentActivity } from "@/components/app/dashboard/recent-activity";
 import { Leaderboards } from "@/components/app/dashboard/leaderboards";
+import { SafetyEventDonuts } from "@/components/app/dashboard/safety-donuts";
 import { PerformanceTrendChart } from "@/components/app/perf/trend-chart";
 
 /** First name from full_name; falls back to "there" if it's an email. */
@@ -39,10 +41,11 @@ function currentAmazonWeek(d: Date): { week: number; year: number } {
 
 export default async function DashboardPage() {
   const me = await requireUser();
-  const [data, companyTrend, leaderboards] = await Promise.all([
+  const [data, companyTrend, leaderboards, safetyMix] = await Promise.all([
     getDashboardData(),
     getCompanyTrend(),
     getDashboardLeaderboards(),
+    getSafetyEventMix(),
   ]);
   const today = new Date();
   const { week, year } = currentAmazonWeek(today);
@@ -143,6 +146,9 @@ export default async function DashboardPage() {
           <RecentActivity sessions={data.recentSessions} />
         </div>
       </section>
+
+      {/* Safety event mix donuts */}
+      <SafetyEventDonuts mix={safetyMix} />
 
       <p className="text-xs text-muted-foreground">
         Quality coaching uses thresholds: DCR&nbsp;&lt;&nbsp;99% ·

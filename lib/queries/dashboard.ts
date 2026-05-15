@@ -332,6 +332,113 @@ export const getDashboardLeaderboards = cache(
   },
 );
 
+export interface SafetyMix {
+  weekStart: string; // YYYY-MM-DD (Sun)
+  weekEnd: string; // YYYY-MM-DD (Sat)
+  impacting: { byType: { event_type: string; count: number }[]; total: number };
+  nonImpacting: {
+    byType: { event_type: string; count: number }[];
+    total: number;
+  };
+}
+
+/**
+ * Compute the previous *completed* Amazon week (Sun-Sat) relative to `now`.
+ * If now is mid-week (Tue), the previous week is the most-recent Sun→Sat.
+ * If now is Saturday itself, the previous week is still the one ending the
+ * prior Saturday — today's not "completed" until midnight.
+ */
+function previousAmazonWeekRange(now: Date): {
+  start: string;
+  end: string;
+} {
+  const day = now.getUTCDay(); // 0=Sun, 6=Sat
+  // daysUntilNextSat ranges 0 (today is Sat) → 6 (today is Sun).
+  const daysUntilNextSat = (6 - day + 7) % 7;
+  const currentWeekEnd = new Date(now);
+  currentWeekEnd.setUTCDate(currentWeekEnd.getUTCDate() + daysUntilNextSat);
+  const previousWeekEnd = new Date(currentWeekEnd);
+  previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() - 7);
+  const previousWeekStart = new Date(previousWeekEnd);
+  previousWeekStart.setUTCDate(previousWeekStart.getUTCDate() - 6);
+  return {
+    start: previousWeekStart.toISOString().slice(0, 10),
+    end: previousWeekEnd.toISOString().slice(0, 10),
+  };
+}
+
+/**
+ * Aggregated safety events from the previous completed Amazon week, split
+ * by severity into two groupings suitable for donut charts.
+ *
+ * The window is calendar-based (Sun-Sat just completed), not data-based —
+ * the user downloads the safety report on Monday for the previous week, so
+ * the donut should always reflect that fixed window even if a Netradyne
+ * import lands a few days late.
+ *
+ * Per-type counts are sorted desc so the biggest slice / legend row is
+ * first. Empty results return [] with total: 0; the UI renders an empty
+ * state.
+ */
+export const getSafetyEventMix = cache(async (): Promise<SafetyMix> => {
+  const supabase = await createClient();
+  const range = previousAmazonWeekRange(new Date());
+
+  // event_date is timestamptz. Window is half-open: [start 00:00Z, end+1 00:00Z).
+  const endNext = new Date(`${range.end}T00:00:00Z`);
+  endNext.setUTCDate(endNext.getUTCDate() + 1);
+
+  const { data, error } = await supabase
+    .from("safety_events")
+    .select("event_type, severity, count")
+    .gte("event_date", `${range.start}T00:00:00Z`)
+    .lt("event_date", endNext.toISOString());
+
+  if (error) {
+    console.error("getSafetyEventMix failed:", error);
+    return {
+      weekStart: range.start,
+      weekEnd: range.end,
+      impacting: { byType: [], total: 0 },
+      nonImpacting: { byType: [], total: 0 },
+    };
+  }
+
+  const impactingCounts = new Map<string, number>();
+  const nonImpactingCounts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const target =
+      r.severity === "impacting" ? impactingCounts : nonImpactingCounts;
+    const k = (r.event_type as string) ?? "Unknown";
+    target.set(k, (target.get(k) ?? 0) + ((r.count as number) ?? 0));
+  }
+
+  const toSortedArray = (m: Map<string, number>) =>
+    [...m.entries()]
+      .map(([event_type, count]) => ({ event_type, count }))
+      .filter((r) => r.count > 0)
+      .sort((a, b) =>
+        b.count !== a.count
+          ? b.count - a.count
+          : a.event_type.localeCompare(b.event_type),
+      );
+
+  const impByType = toSortedArray(impactingCounts);
+  const nonByType = toSortedArray(nonImpactingCounts);
+  return {
+    weekStart: range.start,
+    weekEnd: range.end,
+    impacting: {
+      byType: impByType,
+      total: impByType.reduce((s, r) => s + r.count, 0),
+    },
+    nonImpacting: {
+      byType: nonByType,
+      total: nonByType.reduce((s, r) => s + r.count, 0),
+    },
+  };
+});
+
 export const getDashboardData = cache(async () => {
   const supabase = await createClient();
   const win = await resolveWindow();
