@@ -261,13 +261,13 @@ Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning 
 Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.
 - **DSP Overview (CSV)** — *primary scorecard source going forward.* Per-driver tier + overall_score + every metric.
 - **Scorecard (PDF)** — fallback when the CSV isn't available; same destination table.
-- **Netradyne (CSV)** — aggregated event counts; wipe-and-replace by (`source`, `event_date`).
+- **Netradyne (CSV)** — aggregated event counts; wipe-and-replace by (`source`, `event_date`). **Does not auto-create drivers** — names not already in the `drivers` table are skipped, because Netradyne camera accounts often span multiple physical DSP locations under one org (e.g. DUT4 + DUT7). A driver joins this DSP only when they appear in a station-specific source below.
 - **Escalations (CSV)** — Amazon-issued infractions.
 - **Concessions (CSV)** — per-package delivery defects.
 - **CDF Negative (CSV)** — per-package customer feedback (handles daily and weekly exports).
 - **POD Details (PDF)** — photo-on-delivery acceptance breakdown by reject reason. Year falls back to filename when missing in PDF text.
 
-Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows.
+Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows **for all imports except Netradyne** (see above).
 
 ### 7. Management (`/admin/users`)
 Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout.

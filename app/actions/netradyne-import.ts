@@ -13,8 +13,17 @@ import {
  * inserting one row per (driver, event_type) with a non-zero count.
  *
  * Driver matching is by normalized full_name (we don't store Netradyne
- * IDs). Unmatched drivers get auto-created with status=active and no
- * transporter_id (a future scorecard import will populate that).
+ * IDs). Unmatched drivers are **skipped**, not auto-created — Netradyne
+ * camera accounts often span multiple physical DSP locations (e.g. DUT4
+ * + DUT7 under one Netradyne org), and auto-creating would pollute this
+ * DSP's drivers list with people we don't operate.
+ *
+ * A driver becomes part of this DSP when they appear in any
+ * Amazon-issued data source: scorecards / DSP Overview / POD Details /
+ * Concessions / CDF Negative / Escalations. Those imports do auto-create
+ * because each of those reports is station-specific. Once a driver
+ * exists from one of those sources, subsequent Netradyne imports will
+ * attach their safety events.
  */
 
 export interface NetradyneImportSummary {
@@ -22,7 +31,15 @@ export interface NetradyneImportSummary {
   error?: string;
   parsed?: ParsedNetradyneReport;
   matched_count?: number;
+  /** Always 0 — Netradyne no longer auto-creates drivers. Kept on the type
+   * so the shared import-result UI keeps compiling; the Netradyne tab
+   * shows skipped_unknown_count instead. */
   created_drivers_count?: number;
+  /** Names present in the CSV that don't match any existing driver in
+   * this DSP. Sampled in the UI; full list lives in errors[] of the
+   * file_imports audit row. */
+  skipped_unknown_count?: number;
+  skipped_unknown_sample?: string[];
   events_written?: number;
   events_replaced?: number;
   errors?: { driver_name: string; reason: string }[];
@@ -97,9 +114,9 @@ export async function importNetradyneCsv(
   }
   const fileImportId = importRow.id as string;
 
-  // 4. Resolve / create driver IDs.
-  let createdDrivers = 0;
+  // 4. Resolve driver IDs. Unmatched names are skipped (see header comment).
   let matched = 0;
+  const skippedNames: string[] = [];
   const errors: NetradyneImportSummary["errors"] = [];
   type EventInsert = {
     driver_id: string;
@@ -118,35 +135,16 @@ export async function importNetradyneCsv(
   const eventDate = `${parsed.period_end}T00:00:00Z`;
 
   for (const d of parsed.drivers) {
-    let driverId: string | undefined = byName.get(normalizeName(d.full_name));
-
-    if (driverId) {
-      matched++;
-    } else {
-      const { data: created, error } = await supabase
-        .from("drivers")
-        .insert({
-          full_name: d.full_name,
-          status: "active",
-          approved_vehicle_types: [],
-        })
-        .select("id")
-        .single();
-      if (error || !created) {
-        errors.push({
-          driver_name: d.full_name,
-          reason: `Create failed: ${error?.message ?? "unknown"}`,
-        });
-        continue;
-      }
-      driverId = created.id as string;
-      byName.set(normalizeName(d.full_name), driverId);
-      createdDrivers++;
+    const driverId = byName.get(normalizeName(d.full_name));
+    if (!driverId) {
+      skippedNames.push(d.full_name);
+      continue;
     }
+    matched++;
 
     for (const ev of d.events) {
       eventRows.push({
-        driver_id: driverId!,
+        driver_id: driverId,
         event_date: eventDate,
         event_type: ev.event_type,
         severity: ev.severity,
@@ -197,13 +195,22 @@ export async function importNetradyneCsv(
     }
   }
 
-  // 7. Update audit row.
+  // 7. Update audit row. Skipped names go into errors[] for the audit trail
+  //    even though they're not really errors — gives the user a place to
+  //    find the full list later if "skipped: 47" isn't enough detail.
+  const auditErrors = [
+    ...errors,
+    ...skippedNames.map((n) => ({
+      driver_name: n,
+      reason: "Not in this DSP (Netradyne-only — skipped)",
+    })),
+  ];
   await supabase
     .from("file_imports")
     .update({
       success_count: writtenCount,
-      error_count: errors.length,
-      errors: errors,
+      error_count: errors.length, // genuine errors, not the skipped tally
+      errors: auditErrors,
     })
     .eq("id", fileImportId);
 
@@ -219,7 +226,9 @@ export async function importNetradyneCsv(
     error: errors.length > 0 && writtenCount === 0 ? errors[0]?.reason : undefined,
     parsed,
     matched_count: matched,
-    created_drivers_count: createdDrivers,
+    created_drivers_count: 0,
+    skipped_unknown_count: skippedNames.length,
+    skipped_unknown_sample: skippedNames.slice(0, 5),
     events_written: writtenCount,
     events_replaced: replacedCount ?? 0,
     errors,

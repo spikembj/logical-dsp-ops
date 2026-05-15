@@ -120,8 +120,17 @@ export function NetradyneUpload() {
             <dd>{summary.parsed.drivers.length}</dd>
             <dt className="text-muted-foreground">Matched existing</dt>
             <dd>{summary.matched_count ?? 0}</dd>
-            <dt className="text-muted-foreground">New drivers created</dt>
-            <dd>{summary.created_drivers_count ?? 0}</dd>
+            <dt className="text-muted-foreground">Skipped (not in DSP)</dt>
+            <dd
+              title={
+                summary.skipped_unknown_sample &&
+                summary.skipped_unknown_sample.length > 0
+                  ? `e.g. ${summary.skipped_unknown_sample.join(", ")}${(summary.skipped_unknown_count ?? 0) > 5 ? "…" : ""}`
+                  : undefined
+              }
+            >
+              {summary.skipped_unknown_count ?? 0}
+            </dd>
             <dt className="text-muted-foreground">Event rows written</dt>
             <dd>{summary.events_written ?? 0}</dd>
             {!!summary.events_replaced && (
