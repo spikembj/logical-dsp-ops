@@ -333,8 +333,12 @@ export const getDashboardLeaderboards = cache(
 );
 
 export interface SafetyMix {
-  weekStart: string; // YYYY-MM-DD (Sun)
-  weekEnd: string; // YYYY-MM-DD (Sat)
+  /** Inferred period start (period_end - 6d). Null if no events yet. */
+  weekStart: string | null;
+  /** Period end taken from max(safety_events.event_date). Null if no events. */
+  weekEnd: string | null;
+  /** Whether we have any events to show. */
+  hasData: boolean;
   impacting: { byType: { event_type: string; count: number }[]; total: number };
   nonImpacting: {
     byType: { event_type: string; count: number }[];
@@ -343,62 +347,64 @@ export interface SafetyMix {
 }
 
 /**
- * Compute the previous *completed* Amazon week (Sun-Sat) relative to `now`.
- * If now is mid-week (Tue), the previous week is the most-recent Sun→Sat.
- * If now is Saturday itself, the previous week is still the one ending the
- * prior Saturday — today's not "completed" until midnight.
- */
-function previousAmazonWeekRange(now: Date): {
-  start: string;
-  end: string;
-} {
-  const day = now.getUTCDay(); // 0=Sun, 6=Sat
-  // daysUntilNextSat ranges 0 (today is Sat) → 6 (today is Sun).
-  const daysUntilNextSat = (6 - day + 7) % 7;
-  const currentWeekEnd = new Date(now);
-  currentWeekEnd.setUTCDate(currentWeekEnd.getUTCDate() + daysUntilNextSat);
-  const previousWeekEnd = new Date(currentWeekEnd);
-  previousWeekEnd.setUTCDate(previousWeekEnd.getUTCDate() - 7);
-  const previousWeekStart = new Date(previousWeekEnd);
-  previousWeekStart.setUTCDate(previousWeekStart.getUTCDate() - 6);
-  return {
-    start: previousWeekStart.toISOString().slice(0, 10),
-    end: previousWeekEnd.toISOString().slice(0, 10),
-  };
-}
-
-/**
- * Aggregated safety events from the previous completed Amazon week, split
- * by severity into two groupings suitable for donut charts.
+ * Aggregated safety events from the most recent Netradyne upload, split by
+ * severity into two groupings suitable for donut charts.
  *
- * The window is calendar-based (Sun-Sat just completed), not data-based —
- * the user downloads the safety report on Monday for the previous week, so
- * the donut should always reflect that fixed window even if a Netradyne
- * import lands a few days late.
+ * Window strategy: **data-based, not calendar-based.** Find the most recent
+ * event_date in safety_events (which is the period_end of the latest
+ * upload, since the parser collapses all events from one CSV to a single
+ * date). The donut shows every event on that date.
  *
- * Per-type counts are sorted desc so the biggest slice / legend row is
- * first. Empty results return [] with total: 0; the UI renders an empty
- * state.
+ * Display range: inferred as [period_end - 6 days, period_end] — matches a
+ * weekly Netradyne report. If the user moves to daily uploads, the inferred
+ * range will be wrong; that's a known limitation until Pass 8 stores the
+ * real period_start on file_imports.
+ *
+ * Empty state when safety_events is empty: weekStart/weekEnd null,
+ * hasData false, the UI surfaces a "no data yet" message.
  */
 export const getSafetyEventMix = cache(async (): Promise<SafetyMix> => {
   const supabase = await createClient();
-  const range = previousAmazonWeekRange(new Date());
+  const { data: latestRow, error: latestErr } = await supabase
+    .from("safety_events")
+    .select("event_date")
+    .order("event_date", { ascending: false })
+    .limit(1);
+  if (latestErr) {
+    console.error("getSafetyEventMix latest probe failed:", latestErr);
+  }
+  const latestRaw = latestRow?.[0]?.event_date as string | undefined;
+  if (!latestRaw) {
+    return {
+      weekStart: null,
+      weekEnd: null,
+      hasData: false,
+      impacting: { byType: [], total: 0 },
+      nonImpacting: { byType: [], total: 0 },
+    };
+  }
 
-  // event_date is timestamptz. Window is half-open: [start 00:00Z, end+1 00:00Z).
-  const endNext = new Date(`${range.end}T00:00:00Z`);
-  endNext.setUTCDate(endNext.getUTCDate() + 1);
+  // The latest event_date is a timestamptz. Compute its UTC calendar day
+  // and use a half-open day window [day, day + 1) to capture every event
+  // sharing that date — one Netradyne upload puts all rows on one day.
+  const d = new Date(latestRaw);
+  const dayStart = new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
+  const dayEnd = new Date(dayStart.getTime() + 86_400_000);
 
   const { data, error } = await supabase
     .from("safety_events")
     .select("event_type, severity, count")
-    .gte("event_date", `${range.start}T00:00:00Z`)
-    .lt("event_date", endNext.toISOString());
+    .gte("event_date", dayStart.toISOString())
+    .lt("event_date", dayEnd.toISOString());
 
   if (error) {
     console.error("getSafetyEventMix failed:", error);
     return {
-      weekStart: range.start,
-      weekEnd: range.end,
+      weekStart: null,
+      weekEnd: null,
+      hasData: false,
       impacting: { byType: [], total: 0 },
       nonImpacting: { byType: [], total: 0 },
     };
@@ -425,9 +431,14 @@ export const getSafetyEventMix = cache(async (): Promise<SafetyMix> => {
 
   const impByType = toSortedArray(impactingCounts);
   const nonByType = toSortedArray(nonImpactingCounts);
+  const weekEnd = dayStart.toISOString().slice(0, 10);
+  const weekStartDate = new Date(dayStart.getTime() - 6 * 86_400_000);
+  const weekStart = weekStartDate.toISOString().slice(0, 10);
+  const hasData = impByType.length > 0 || nonByType.length > 0;
   return {
-    weekStart: range.start,
-    weekEnd: range.end,
+    weekStart,
+    weekEnd,
+    hasData,
     impacting: {
       byType: impByType,
       total: impByType.reduce((s, r) => s + r.count, 0),

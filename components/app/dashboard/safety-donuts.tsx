@@ -43,28 +43,56 @@ interface RowItem {
  * share that window.
  */
 export function SafetyEventDonuts({ mix }: { mix: SafetyMix }) {
-  const startLabel = format(parseISO(mix.weekStart), "MMM d");
-  const endLabel = format(parseISO(mix.weekEnd), "MMM d");
+  const rangeLabel =
+    mix.weekStart && mix.weekEnd
+      ? `Week of ${format(parseISO(mix.weekStart), "MMM d")} – ${format(parseISO(mix.weekEnd), "MMM d")}`
+      : "No safety data yet";
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-base font-medium">Safety event mix</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Week of {startLabel} – {endLabel}
+          {rangeLabel}
+          {mix.hasData && (
+            <>
+              {" "}
+              <span className="text-muted-foreground/70">
+                · from your latest Netradyne upload
+              </span>
+            </>
+          )}
         </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <SafetyDonut
-          title="Impacting"
-          total={mix.impacting.total}
-          byType={mix.impacting.byType}
-        />
-        <SafetyDonut
-          title="Non-impacting"
-          total={mix.nonImpacting.total}
-          byType={mix.nonImpacting.byType}
-        />
-      </div>
+      {!mix.hasData ? (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            No safety events on file yet.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Upload a Netradyne CSV on the{" "}
+            <a
+              href="/import"
+              className="underline-offset-4 hover:underline text-foreground"
+            >
+              Import
+            </a>{" "}
+            page to populate this section.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <SafetyDonut
+            title="Impacting"
+            total={mix.impacting.total}
+            byType={mix.impacting.byType}
+          />
+          <SafetyDonut
+            title="Non-impacting"
+            total={mix.nonImpacting.total}
+            byType={mix.nonImpacting.byType}
+          />
+        </div>
+      )}
     </section>
   );
 }
