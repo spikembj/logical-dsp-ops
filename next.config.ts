@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdfjs-dist ships its worker as a sibling .mjs file resolved at runtime.
-  // The Next/Turbopack bundler can't trace that, so we keep the package
-  // external on the server and let Node resolve it from node_modules normally.
-  serverExternalPackages: ["pdfjs-dist"],
+  // Keep both packages external so Node resolves them from node_modules at
+  // runtime instead of letting the bundler trace them:
+  //   - pdfjs-dist: ships a sibling worker .mjs file the bundler can't trace.
+  //   - @napi-rs/canvas: ships a platform-specific native binary that must be
+  //     resolved by Node, not bundled. Used by lib/parsing/pdfjs-node-polyfill
+  //     to provide DOMMatrix/Path2D/ImageData on Vercel's Node runtime.
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
 };
 
 export default nextConfig;

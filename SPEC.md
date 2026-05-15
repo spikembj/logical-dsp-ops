@@ -36,7 +36,7 @@ Long-term vision: a single tool that owns roster, performance, attendance, fleet
 | Auth | Supabase Auth | Email/password + role-based |
 | File storage | Supabase Storage | (planned) for CSV/PDF archive |
 | CSV parsing | PapaParse | Battle-tested |
-| PDF parsing | pdfjs-dist (legacy/Node build) | Works server-side; configured via `serverExternalPackages` |
+| PDF parsing | pdfjs-dist (legacy/Node build) + `@napi-rs/canvas` polyfill | Legacy build runs in Node; the canvas package provides `DOMMatrix`/`Path2D`/`ImageData` on Vercel's stricter Node runtime (see `lib/parsing/pdfjs-node-polyfill.ts`). Both packages are `serverExternalPackages`. |
 | Charts | Recharts | Multi-line trend chart on the per-driver Performance tab (last 12 weeks: Overall / DCR / POD / FICO) |
 | Hosting | Vercel | Free tier, zero-config Next.js deploys |
 

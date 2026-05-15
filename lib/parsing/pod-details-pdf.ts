@@ -1,4 +1,5 @@
 import "server-only";
+import "./pdfjs-node-polyfill"; // must precede any pdfjs-dist import (see file)
 import { amazonWeekEnding } from "@/lib/format/dates";
 
 /**
