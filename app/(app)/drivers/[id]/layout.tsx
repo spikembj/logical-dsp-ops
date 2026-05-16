@@ -2,10 +2,13 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/require-role";
 import { getDriverById, getLatestScorecard } from "@/lib/queries/drivers";
+import { getLatestCoachingForDriver } from "@/lib/queries/coaching";
 import { StatusBadge, TierBadge } from "@/lib/format/badges";
 import { DriverTabs } from "@/components/app/driver-tabs";
 import {
   amazonWeekFromEndingDate,
+  formatSessionDate,
+  relativeFromNow,
 } from "@/lib/format/dates";
 
 interface Props {
@@ -18,7 +21,10 @@ export default async function DriverLayout({ params, children }: Props) {
   const { id } = await params;
   const driver = await getDriverById(id);
   if (!driver) notFound();
-  const latest = await getLatestScorecard(id);
+  const [latest, lastCoachedAt] = await Promise.all([
+    getLatestScorecard(id),
+    getLatestCoachingForDriver(id),
+  ]);
   const latestWeekLabel = latest
     ? (() => {
         const { week, year } = amazonWeekFromEndingDate(latest.week_ending);
@@ -58,7 +64,17 @@ export default async function DriverLayout({ params, children }: Props) {
             </span>
           )}
           <span className="text-xs text-muted-foreground">
-            Last coached: —
+            Last coached:{" "}
+            {lastCoachedAt ? (
+              <span
+                className="text-foreground"
+                title={formatSessionDate(lastCoachedAt)}
+              >
+                {relativeFromNow(lastCoachedAt)}
+              </span>
+            ) : (
+              "—"
+            )}
           </span>
         </div>
         <div className="font-mono text-xs text-muted-foreground break-all">

@@ -79,7 +79,7 @@ Internal team members.
 - `hire_date` (date, nullable)
 - `status` (enum: **active / loa / terminated / inactive**)
 - `position` (enum: **driver / helper**, default `driver`) — helpers ride along but don't drive any vehicle.
-- `approved_vehicle_types` (`vehicle_type[]` — `cdv / edv / standard_parcel / rivian`). Ignored when `position = helper`.
+- `approved_vehicle_types` (`vehicle_type[]` — `cdv / edv / standard_parcel`). Ignored when `position = helper`. (Rivians are operated as EDVs at this DSP, so the legacy `rivian` enum value was removed; existing rivian-approved drivers were folded into edv.)
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
 
@@ -245,7 +245,7 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.
 
 ### 4. Driver detail (`/drivers/[id]`)
-Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached.
+Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached (relative time with absolute date in tooltip; — when never coached).
 
 - **Profile:** read-only fields including Position. Editing happens via `/admin/employees`.
 - **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD with toggleable series; FICO is captured in scorecards but intentionally not charted) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).

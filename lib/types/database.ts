@@ -40,7 +40,7 @@ export function isManagement(role: UserRole | null | undefined): boolean {
   return !!role && (MANAGEMENT_ROLES as string[]).includes(role);
 }
 export type DriverStatus = "active" | "loa" | "terminated" | "inactive";
-export type VehicleType = "cdv" | "edv" | "standard_parcel" | "rivian";
+export type VehicleType = "cdv" | "edv" | "standard_parcel";
 export type DriverPosition = "driver" | "helper";
 export type Tier =
   | "fantastic_plus"

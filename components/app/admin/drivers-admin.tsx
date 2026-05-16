@@ -45,7 +45,6 @@ const VEHICLE_OPTIONS: { label: string; value: VehicleType }[] = [
   { label: "CDV", value: "cdv" },
   { label: "EDV", value: "edv" },
   { label: "Standard Parcel", value: "standard_parcel" },
-  { label: "Rivian", value: "rivian" },
 ];
 
 const POSITION_OPTIONS: { label: string; value: DriverPosition }[] = [

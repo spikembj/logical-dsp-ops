@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
 const StatusSchema = z.enum(["active", "loa", "terminated", "inactive"]);
-const VehicleSchema = z.enum(["cdv", "edv", "standard_parcel", "rivian"]);
+const VehicleSchema = z.enum(["cdv", "edv", "standard_parcel"]);
 const PositionSchema = z.enum(["driver", "helper"]);
 
 const CreateSchema = z.object({

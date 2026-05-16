@@ -10,6 +10,28 @@ interface UserMini {
 }
 
 /**
+ * Most recent non-voided coaching session date for a single driver, or null.
+ * Used by the driver detail header to show "Last coached: 3 days ago".
+ * Cached per request so the layout + page can both call it without
+ * a second round-trip.
+ */
+export const getLatestCoachingForDriver = cache(
+  async (driverId: string): Promise<string | null> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("coaching_sessions")
+      .select("session_date")
+      .eq("driver_id", driverId)
+      .is("voided_at", null)
+      .order("session_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.session_date as string;
+  },
+);
+
+/**
  * A single coaching session with the coach + voider display info joined in.
  * Hand-typed for now; once we regenerate types from the live schema,
  * we can drop this and use the generated types directly.
