@@ -224,7 +224,7 @@ Email + password (Supabase Auth). Inactive users blocked. Header includes a soft
 ### 2. Performance dashboard (`/`)
 Title: **Performance**. (App will host multiple dashboards over time — Ops, HR, Fleet — so the home dashboard is named for what it covers, not generic "Dashboard".)
 
-**View toggle:** a pill control on the right side of the header switches between **Safety** and **Quality** views — same page, same `/`, just `?view=quality` in the URL when on the quality side. Defaults to Safety. Stat tiles, company trend chart, leaderboards, the needs-coaching hero, and the donuts all change content based on the selected view. The greeting line and the "Active drivers · N" subtitle are always visible.
+**View toggle:** a pill control inline with the H1 switches between **Quality** and **Safety** views — same page, same `/`, just `?view=safety` in the URL when on the safety side. **Defaults to Quality** (the user's site isn't the live source for incoming safety events — those come through Netradyne directly — so quality is the more useful daily landing surface). Stat tiles, company trend chart, leaderboards, the needs-coaching hero, and the donuts all change content based on the selected view. The greeting line and the "Active drivers · N" subtitle are always visible.
 
 Header: `Hi {firstName} — Week {N}, {Month Do, YYYY} · {N} active drivers`. If imported data lags today, header appends "(data through {date})". The active drivers count was previously a stat tile; demoted to subtitle since it's contextual not operational.
 
@@ -236,7 +236,7 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY} · {N} active drivers`. I
 
 #### Quality view stat tiles (4)
 - **Avg overall score** — average across all drivers in the latest scorecard week.
-- **Drivers with negative CDF** — distinct drivers with one or more `cdf_negative` rows in the **latest scorecard week** (Sun-Sat). Same window as the CDF donut below, so the tile count and the donut total match.
+- **Drivers with negative CDF** — distinct drivers with one or more `cdf_negative` rows in the Quality dashboard's anchor week (see donut section for the anchor logic). Same window as the CDF donut below, so the tile count and the donut total match.
 - **Coaching sessions** — logged this week.
 - **Below threshold** — drivers breaking any quality threshold (DCR / POD / CDF DPMO / CED / DSB DPMO / DSB Count / PSB) on the latest scorecard. Clickable dialog with the list.
 
@@ -262,7 +262,7 @@ Same simple unweighted average across all drivers per week — no minimum-volume
 Two donut charts side by side (Impacting / Non-impacting), each showing the per-event-type breakdown for the **rolling last 7 days**. Designed for the daily Netradyne upload workflow.
 
 #### Quality view donuts
-Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows whose `delivery_date` falls in the latest scorecard week) and **DSB** (defect types from `concessions WHERE impacts_dsb = true` whose `concession_date` falls in the same week). The window is the Sun-Sat Amazon week of the most recent scorecard upload — keeps the donuts, tile #2, leaderboards, and tile #4 all telling the same week's story. CDF Negative and Concessions arrive as weekly Amazon reports, so a rolling-7-day window would usually be empty between uploads; scorecard-week alignment fixes that. The DSB donut deliberately reuses concessions data rather than maintaining a parallel DSB table — the underlying Amazon CSV is the same.
+Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows in the anchor week) and **DSB** (defect types from `concessions WHERE impacts_dsb = true` in the anchor week). The anchor week is the Sun-Sat Amazon week containing the **most recent date across scorecards, cdf_negative, and concessions** — chosen this way because Amazon publishes scorecards a day or two into the following week, while CDF Negative and Concessions may already be uploaded for the just-completed week. Strictly anchoring to scorecard week would hide that fresh data; taking the max-of-all keeps the donuts honest. Leaderboards stay on scorecard week (they need overall_score) so the donut and leaderboard subtitles may name different weeks during the early-week scorecard gap — each surface labels its own week. The DSB donut deliberately reuses concessions data rather than maintaining a parallel DSB table — the underlying Amazon CSV is the same.
 
 #### Needs coaching hero
 Renders below the leaderboards on both views. Content is filtered to whichever view is active — no more in-list Safety/Quality toggle (the dashboard-level toggle handles it). Per-row inline `Log session` button pre-fills the dialog with the view's trigger context.

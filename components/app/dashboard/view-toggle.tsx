@@ -17,8 +17,8 @@ export function ViewToggle({ current }: { current: DashboardView }) {
 
   function setView(view: DashboardView) {
     const next = new URLSearchParams(params.toString());
-    if (view === "safety") next.delete("view"); // default = safety, keep URL clean
-    else next.set("view", "quality");
+    if (view === "quality") next.delete("view"); // default = quality, keep URL clean
+    else next.set("view", "safety");
     const qs = next.toString();
     router.replace(qs ? `/?${qs}` : "/", { scroll: false });
   }

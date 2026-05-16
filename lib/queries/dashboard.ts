@@ -576,12 +576,21 @@ export interface DefectMix {
 }
 
 /**
- * Quality dashboard data — CDF/DSB donuts + the negative-CDF tile — is
- * anchored to the **latest scorecard week** (Sun-Sat), not a rolling 7
- * days. CDF Negative and Concessions ship as weekly Amazon reports, so
- * aligning their donut window to the scorecard week keeps all of Quality
- * dashboard's "this week" surfaces telling the same story. Returns null
- * if no scorecards exist yet.
+ * Window helper for Quality dashboard surfaces (CDF donut, DSB donut,
+ * negative-CDF tile #2). Returns the Sun-Sat Amazon week containing the
+ * **most recent date across scorecards, cdf_negative, and concessions**.
+ *
+ * Why max-of-all and not just the latest scorecard: Amazon publishes
+ * scorecards a day or two into the following week, but CDF Negative and
+ * Concessions can show up first (or be uploaded ahead). If we anchored
+ * strictly to the scorecard week, fresh CDF/concession data for the
+ * current week would silently fall outside the window. Taking the max
+ * keeps the donuts honest about what data is actually on file.
+ *
+ * Leaderboards still anchor to the latest scorecard week directly (they
+ * need overall_score), so the donut and leaderboard subtitles may name
+ * different weeks during the early-week scorecard gap — each surface
+ * shows its own week explicitly.
  */
 interface ScorecardWeekRange {
   /** YYYY-MM-DD Sunday */
@@ -593,25 +602,55 @@ interface ScorecardWeekRange {
   /** ISO timestamp at Saturday+1 00:00 UTC (exclusive upper bound) */
   endExclusiveIso: string;
 }
+/** Compute the Sun-Sat week containing a given calendar day. */
+function weekRangeContaining(yyyymmdd: string): ScorecardWeekRange {
+  const d = new Date(`${yyyymmdd}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0=Sun..6=Sat
+  const daysUntilSat = (6 - day + 7) % 7;
+  const end = new Date(d.getTime() + daysUntilSat * 86_400_000);
+  const start = new Date(end.getTime() - 6 * 86_400_000);
+  const endExclusive = new Date(end.getTime() + 86_400_000);
+  return {
+    rangeStart: start.toISOString().slice(0, 10),
+    rangeEnd: end.toISOString().slice(0, 10),
+    startIso: start.toISOString(),
+    endExclusiveIso: endExclusive.toISOString(),
+  };
+}
 const getLatestScorecardWeekRange = cache(
   async (): Promise<ScorecardWeekRange | null> => {
     const supabase = await createClient();
-    const { data } = await supabase
-      .from("scorecards")
-      .select("week_ending")
-      .order("week_ending", { ascending: false })
-      .limit(1);
-    const weekEnding = data?.[0]?.week_ending as string | undefined;
-    if (!weekEnding) return null;
-    const end = new Date(`${weekEnding}T00:00:00Z`);
-    const start = new Date(end.getTime() - 6 * 86_400_000);
-    const endExclusive = new Date(end.getTime() + 86_400_000);
-    return {
-      rangeStart: start.toISOString().slice(0, 10),
-      rangeEnd: end.toISOString().slice(0, 10),
-      startIso: start.toISOString(),
-      endExclusiveIso: endExclusive.toISOString(),
-    };
+    const [scWk, cdfMax, concMax] = await Promise.all([
+      supabase
+        .from("scorecards")
+        .select("week_ending")
+        .order("week_ending", { ascending: false })
+        .limit(1),
+      supabase
+        .from("cdf_negative")
+        .select("delivery_date")
+        .order("delivery_date", { ascending: false })
+        .limit(1),
+      supabase
+        .from("concessions")
+        .select("concession_date")
+        .order("concession_date", { ascending: false })
+        .limit(1),
+    ]);
+
+    const candidates: string[] = [];
+    const scEnd = scWk.data?.[0]?.week_ending as string | undefined;
+    if (scEnd) candidates.push(scEnd);
+    const cdfRaw = cdfMax.data?.[0]?.delivery_date as string | undefined;
+    if (cdfRaw) candidates.push(cdfRaw.slice(0, 10));
+    const concRaw = concMax.data?.[0]?.concession_date as string | undefined;
+    if (concRaw) candidates.push(concRaw.slice(0, 10));
+
+    if (candidates.length === 0) return null;
+    // Take the most recent calendar day across all three sources, then
+    // expand to its Sun-Sat week.
+    const latest = candidates.sort().at(-1)!;
+    return weekRangeContaining(latest);
   },
 );
 

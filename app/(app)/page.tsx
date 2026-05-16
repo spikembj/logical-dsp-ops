@@ -57,7 +57,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const me = await requireUser();
   const params = await searchParams;
   const view: DashboardView =
-    params.view === "quality" ? "quality" : "safety";
+    params.view === "safety" ? "safety" : "quality";
 
   // Load everything in parallel. Some queries only matter for one view but
   // the cost difference is small and parallel loads beat lazy nav delays.
