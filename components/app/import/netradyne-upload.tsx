@@ -131,6 +131,16 @@ export function NetradyneUpload() {
             >
               {summary.skipped_unknown_count ?? 0}
             </dd>
+            {summary.fuzzy_matched && summary.fuzzy_matched.length > 0 && (
+              <>
+                <dt className="text-muted-foreground">
+                  Fuzzy-matched (verify)
+                </dt>
+                <dd className="text-amber-700 dark:text-amber-400">
+                  {summary.fuzzy_matched.length}
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground">Event rows written</dt>
             <dd>{summary.events_written ?? 0}</dd>
             {!!summary.events_replaced && (
@@ -146,6 +156,30 @@ export function NetradyneUpload() {
               </>
             )}
           </dl>
+          {summary.fuzzy_matched && summary.fuzzy_matched.length > 0 && (
+            <details className="text-xs" open>
+              <summary className="cursor-pointer text-amber-700 dark:text-amber-400 hover:text-foreground">
+                Verify fuzzy matches ({summary.fuzzy_matched.length}) — events
+                attached but the names differ
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {summary.fuzzy_matched.map((f, i) => (
+                  <li key={i} className="text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {f.netradyne_name}
+                    </span>{" "}
+                    →{" "}
+                    <span className="font-medium text-foreground">
+                      {f.matched_to}
+                    </span>{" "}
+                    <span className="text-[10px] uppercase tracking-wider">
+                      ({f.reason.replace(/_/g, " ")})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           {summary.errors && summary.errors.length > 0 && (
             <details className="text-xs">
               <summary className="cursor-pointer text-muted-foreground hover:text-foreground">

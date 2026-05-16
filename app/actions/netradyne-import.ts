@@ -6,6 +6,7 @@ import {
   parseNetradyneCsv,
   type ParsedNetradyneReport,
 } from "@/lib/parsing/netradyne-csv";
+import { findFuzzyMatch, normalizeName } from "@/lib/util/name-match";
 
 /**
  * Server action: accept an uploaded Netradyne event CSV, parse it, then
@@ -40,18 +41,17 @@ export interface NetradyneImportSummary {
    * file_imports audit row. */
   skipped_unknown_count?: number;
   skipped_unknown_sample?: string[];
+  /** Names matched via the fuzzy fallback (Alex → Alexander, Mike →
+   * Michael, etc.). Surfaced so a human can spot-check; full list also
+   * lives in errors[] of the file_imports audit row. */
+  fuzzy_matched?: {
+    netradyne_name: string;
+    matched_to: string;
+    reason: string;
+  }[];
   events_written?: number;
   events_replaced?: number;
   errors?: { driver_name: string; reason: string }[];
-}
-
-function normalizeName(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
 }
 
 export async function importNetradyneCsv(
@@ -81,17 +81,23 @@ export async function importNetradyneCsv(
     };
   }
 
-  // 2. Pull existing drivers for matching.
+  // 2. Pull existing drivers for matching. Helpers excluded from fuzzy
+  //    pool — Amazon doesn't issue scorecards to helpers, so any helper
+  //    name match against a Netradyne entry is almost certainly wrong.
   const { data: existing, error: drvErr } = await supabase
     .from("drivers")
-    .select("id, full_name");
+    .select("id, full_name, position");
   if (drvErr) {
     return { ok: false, error: `Reading drivers: ${drvErr.message}` };
   }
 
   const byName = new Map<string, string>();
+  const fuzzyCandidates: { id: string; full_name: string }[] = [];
   for (const d of existing ?? []) {
     byName.set(normalizeName(d.full_name), d.id);
+    if (d.position !== "helper") {
+      fuzzyCandidates.push({ id: d.id as string, full_name: d.full_name });
+    }
   }
 
   // 3. file_imports audit row.
@@ -114,9 +120,15 @@ export async function importNetradyneCsv(
   }
   const fileImportId = importRow.id as string;
 
-  // 4. Resolve driver IDs. Unmatched names are skipped (see header comment).
+  // 4. Resolve driver IDs. Try strict name match first, then fuzzy fallback
+  //    (nickname / first-name-prefix / extra-last-name) for the legal-vs-
+  //    nickname mismatch case (e.g. Netradyne "Alexander Ritsche" → app
+  //    "Alex Ritsche"). Fuzzy is conservative: only auto-matches when one
+  //    candidate matches; ambiguous → skip. Truly unknown names → skip.
   let matched = 0;
   const skippedNames: string[] = [];
+  const fuzzyMatched: NonNullable<NetradyneImportSummary["fuzzy_matched"]> =
+    [];
   const errors: NetradyneImportSummary["errors"] = [];
   type EventInsert = {
     driver_id: string;
@@ -135,7 +147,18 @@ export async function importNetradyneCsv(
   const eventDate = `${parsed.period_end}T00:00:00Z`;
 
   for (const d of parsed.drivers) {
-    const driverId = byName.get(normalizeName(d.full_name));
+    let driverId = byName.get(normalizeName(d.full_name));
+    if (!driverId) {
+      const fuzzy = findFuzzyMatch(d.full_name, fuzzyCandidates);
+      if (fuzzy) {
+        driverId = fuzzy.driverId;
+        fuzzyMatched.push({
+          netradyne_name: d.full_name,
+          matched_to: fuzzy.fullName,
+          reason: fuzzy.reason,
+        });
+      }
+    }
     if (!driverId) {
       skippedNames.push(d.full_name);
       continue;
@@ -195,11 +218,16 @@ export async function importNetradyneCsv(
     }
   }
 
-  // 7. Update audit row. Skipped names go into errors[] for the audit trail
-  //    even though they're not really errors — gives the user a place to
-  //    find the full list later if "skipped: 47" isn't enough detail.
+  // 7. Update audit row. Skipped names AND fuzzy matches both land in
+  //    errors[] for the audit trail even though they're not real errors —
+  //    gives the user a place to find the full list if the in-UI sample
+  //    isn't enough detail.
   const auditErrors = [
     ...errors,
+    ...fuzzyMatched.map((f) => ({
+      driver_name: f.netradyne_name,
+      reason: `Fuzzy-matched to "${f.matched_to}" (${f.reason})`,
+    })),
     ...skippedNames.map((n) => ({
       driver_name: n,
       reason: "Not in this DSP (Netradyne-only — skipped)",
@@ -229,6 +257,7 @@ export async function importNetradyneCsv(
     created_drivers_count: 0,
     skipped_unknown_count: skippedNames.length,
     skipped_unknown_sample: skippedNames.slice(0, 5),
+    fuzzy_matched: fuzzyMatched,
     events_written: writtenCount,
     events_replaced: replacedCount ?? 0,
     errors,
