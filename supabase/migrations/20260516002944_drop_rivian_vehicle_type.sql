@@ -25,7 +25,12 @@ set approved_vehicle_types = (
 )
 where 'rivian' = any(d.approved_vehicle_types);
 
--- 2-5. Swap the enum.
+-- 2. Drop the column default — Postgres can't auto-cast a default that
+--    references the old enum during the upcoming ALTER COLUMN TYPE.
+alter table public.drivers
+  alter column approved_vehicle_types drop default;
+
+-- 3-6. Swap the enum.
 alter type public.vehicle_type rename to vehicle_type__old;
 
 create type public.vehicle_type as enum ('cdv', 'edv', 'standard_parcel');
@@ -35,4 +40,10 @@ alter table public.drivers
   type public.vehicle_type[]
   using approved_vehicle_types::text[]::public.vehicle_type[];
 
+-- 7. Restore the default using the new enum.
+alter table public.drivers
+  alter column approved_vehicle_types
+  set default '{}'::public.vehicle_type[];
+
+-- 8. Drop the old enum.
 drop type public.vehicle_type__old;
