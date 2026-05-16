@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, ChevronDown, ChevronUp, ShieldAlert, FileWarning } from "lucide-react";
 import { LogSessionDialog } from "@/components/app/coaching/log-session-dialog";
+import { qualityPrefill, safetyPrefill } from "@/lib/util/coaching-prefill";
 import type { DashboardData } from "@/lib/queries/dashboard";
 import { cn } from "@/lib/utils";
 
@@ -200,7 +201,20 @@ function RowItem({ d, mode }: { d: Row; mode: Mode }) {
           )}
         </div>
       </div>
-      <LogSessionDialog driverId={d.driver_id} driverName={d.full_name} />
+      <LogSessionDialog
+        driverId={d.driver_id}
+        driverName={d.full_name}
+        triggerVariant="secondary"
+        triggerLabel="Log session"
+        prefill={
+          mode === "safety"
+            ? safetyPrefill({
+                total_events: d.total_events,
+                event_types: d.event_types,
+              })
+            : qualityPrefill({ issues: d.issues })
+        }
+      />
       <Link
         href={`/drivers/${d.driver_id}`}
         className="text-muted-foreground hover:text-foreground"

@@ -255,6 +255,8 @@ Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **
 ### 5. Log coaching session (modal)
 Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning / Termination), topic, notes, acknowledged toggle. Save creates immutable session record. Edit mode uses same dialog (management only).
 
+**Trigger-context pre-fill:** when the dialog is opened from a needs-coaching row (Performance dashboard hero list) or a category card on the per-driver Triggers panel, fields pre-populate with the category's context — session type defaults to Discussion, topic to "Safety training" / "Quality training" / "Escalation review", and notes to a templated summary of the specific triggers ("3 impacting safety events in last 7 days: Speeding Violations, Driver Distraction", or the latest scorecard's threshold breaches as a bulleted list). Every field stays editable before saving. The standalone "Log new session" button at the top of the Coaching tab intentionally opens **blank** so write-ups and out-of-band sessions aren't shaped by the templates.
+
 ### 6. Import (`/import`)
 Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.
 - **DSP Overview (CSV)** — *primary scorecard source going forward.* Per-driver tier + overall_score + every metric.

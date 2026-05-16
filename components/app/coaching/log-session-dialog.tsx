@@ -25,6 +25,7 @@ import {
 import { todayIso } from "@/lib/format/dates";
 import { cn } from "@/lib/utils";
 import type { CoachingSessionType } from "@/lib/types/database";
+import type { CoachingPrefill } from "@/lib/util/coaching-prefill";
 
 const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
   { value: "discussion", label: "Discussion" },
@@ -38,6 +39,23 @@ type CreateProps = {
   mode?: "create";
   driverId: string;
   driverName: string;
+  /**
+   * Optional pre-fill from trigger context (dashboard needs-coaching row,
+   * per-driver triggers panel category, etc.). The dialog opens with
+   * session_type/topic/notes already populated; the user can still edit
+   * any field before saving. Omit for a fresh blank session — used by
+   * the standalone "Log new session" button on the Coaching tab so
+   * write-ups and out-of-band sessions aren't shaped by trigger
+   * templates.
+   */
+  prefill?: CoachingPrefill;
+  /**
+   * Optional override for the trigger button. By default a "Log new
+   * session" primary button is rendered; needs-coaching rows use this to
+   * substitute a smaller, secondary-styled button that fits inline.
+   */
+  triggerLabel?: string;
+  triggerVariant?: "primary" | "secondary";
 };
 
 type EditProps = {
@@ -62,7 +80,9 @@ export function LogSessionDialog(props: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  // Initial values: edit-mode pre-fills from the session; create-mode uses defaults.
+  // Initial values: edit pre-fills from the session; create either uses the
+  // optional trigger-context prefill, or empty defaults.
+  const prefill = !isEdit ? props.prefill : undefined;
   const initial = isEdit
     ? {
         sessionDate: props.session.session_date,
@@ -73,9 +93,10 @@ export function LogSessionDialog(props: Props) {
       }
     : {
         sessionDate: todayIso(),
-        sessionType: "discussion" as CoachingSessionType,
-        topic: "",
-        notes: "",
+        sessionType:
+          prefill?.session_type ?? ("discussion" as CoachingSessionType),
+        topic: prefill?.topic ?? "",
+        notes: prefill?.notes ?? "",
         acknowledged: false,
       };
 
@@ -145,7 +166,9 @@ export function LogSessionDialog(props: Props) {
         className={cn(
           isEdit
             ? "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            : "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90",
+            : !isEdit && props.triggerVariant === "secondary"
+              ? "inline-flex items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors"
+              : "inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90",
         )}
       >
         {isEdit ? (
@@ -155,8 +178,14 @@ export function LogSessionDialog(props: Props) {
           </>
         ) : (
           <>
-            <MessageSquarePlus className="h-4 w-4" />
-            Log new session
+            <MessageSquarePlus
+              className={cn(
+                props.triggerVariant === "secondary"
+                  ? "h-3.5 w-3.5"
+                  : "h-4 w-4",
+              )}
+            />
+            {props.triggerLabel ?? "Log new session"}
           </>
         )}
       </DialogTrigger>

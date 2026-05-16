@@ -26,7 +26,11 @@ export default async function DriverCoachingPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <TriggersPanel triggers={triggers} />
+      <TriggersPanel
+        triggers={triggers}
+        driverId={driver.id}
+        driverName={driver.full_name}
+      />
 
       <div className="flex items-center justify-between gap-3">
         <div>
