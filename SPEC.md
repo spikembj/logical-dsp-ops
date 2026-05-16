@@ -223,23 +223,48 @@ Email + password (Supabase Auth). Inactive users blocked. Header includes a soft
 ### 2. Performance dashboard (`/`)
 Title: **Performance**. (App will host multiple dashboards over time — Ops, HR, Fleet — so the home dashboard is named for what it covers, not generic "Dashboard".)
 
-Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current calendar week. If imported data lags today, header appends "(data through {date})".
+**View toggle:** a pill control on the right side of the header switches between **Safety** and **Quality** views — same page, same `/`, just `?view=quality` in the URL when on the quality side. Defaults to Safety. Stat tiles, company trend chart, leaderboards, the needs-coaching hero, and the donuts all change content based on the selected view. The greeting line and the "Active drivers · N" subtitle are always visible.
 
-**Stat tiles (4):**
-- Active drivers — distinct drivers with scorecard or safety_event in **last 30 days** (stricter than the 60-day inactive cutoff so the operational headcount is accurate while still keeping recently-stale drivers visible in the drivers list).
-- Safety events — impacting count primary, non-impacting secondary.
-- Coaching sessions — this week.
-- Needs coaching — equal-split SplitStatTile: Safety on the left, Quality on the right.
+Header: `Hi {firstName} — Week {N}, {Month Do, YYYY} · {N} active drivers`. If imported data lags today, header appends "(data through {date})". The active drivers count was previously a stat tile; demoted to subtitle since it's contextual not operational.
 
-**Company trend chart:** Multi-series line chart of weekly company performance over the last 12 amazon weeks. Series: Overall / DCR / POD. Simple unweighted average across all drivers who have a scorecard that week — no minimum-volume filter and no current-status filter (a driver terminated today still contributed to past weeks). Volume-weighting deliberately avoided so the displayed averages don't diverge from Amazon's DSP Overview.
+#### Safety view stat tiles (4)
+- **Impacting events** — last 7 days.
+- **Non-impacting events** — last 7 days.
+- **Coaching sessions** — logged this week.
+- **Above threshold** — drivers with 1+ impacting OR 4+ non-impacting events in the last 7 days. Clickable: opens a dialog with the driver list, each name linking to their profile.
 
-**Leaderboards (3 cards):** Top 5 / Most improved / Bottom 5, all derived from the latest scorecard week.
-- *Top 5 / Bottom 5*: drivers with `delivered ≥ 400` packages that week and `status = 'active'`, sorted by `overall_score` (desc / asc respectively). Ties broken by name asc. Bottom 5 is informational — it includes everyone meeting the threshold regardless of whether they were coached this week.
-- *Most improved (top 3)*: same 400-pkg + active filter applied to **both** the latest week and the week before; ranked by positive score delta. Drivers who got worse are excluded by design. Empty state when nobody improved or there's only one week of data.
+#### Quality view stat tiles (4)
+- **Avg overall score** — average across all drivers in the latest scorecard week.
+- **Avg DCR** — same averaging.
+- **Coaching sessions** — logged this week.
+- **Below threshold** — drivers breaking any quality threshold (DCR / POD / CDF DPMO / CED / DSB DPMO / DSB Count / PSB) on the latest scorecard. Clickable dialog with the list.
 
-**Safety event mix:** Two donut charts side by side (Impacting / Non-impacting), each showing the per-event-type breakdown for the **rolling last 7 days** (today and the 6 calendar days before it, UTC). Designed for the daily Netradyne upload workflow — each CSV covers one day, and the donut reflects the trailing week regardless of whether every day was uploaded. Each donut has a legend list (type + count) sorted desc. Empty state shows a "no events in the last 7 days" panel that links to the Import page.
+#### Safety view trend chart
+Per-event-type weekly counts for the last 12 Amazon weeks. Severity toggle (Impacting / Non-impacting) swaps the data source. Each event type gets its own colored line; the top 4 highest-volume types are active by default, others toggle on/off via legend pills.
 
-**Hero list:** "Needs coaching this week" with Safety/Quality toggle (counts shown as pill chips), Show-N picker (15/30/50/All, default 15), whole section collapsible, inline `Log session` button per row that opens the same dialog used on the Coaching tab. Renders full-width below the leaderboards.
+#### Quality view trend chart
+Multi-series line chart with a scale toggle (Percent / DPMO+count):
+- **Percent** mode: Overall / DCR / POD (0-100 axis).
+- **DPMO** mode: CDF DPMO / DSB DPMO / CED (auto-scaled, lower is better).
+Same simple unweighted average across all drivers per week — no minimum-volume filter, no current-status filter. Volume-weighting deliberately avoided so the displayed averages don't diverge from Amazon's DSP Overview.
+
+#### Safety view leaderboards (3 cards)
+- **Cleanest 5** — fewest impacting events in the last 7 days, ascending. Eligibility = drivers in the latest scorecard (i.e. they actually ran routes during the reporting week).
+- **Most improved (top 3)** — biggest week-over-week drop in impacting events. Both weeks must show enough activity to compare; drivers with no improvement excluded.
+- **Most events** — descending. Only includes drivers with ≥1 event.
+
+#### Quality view leaderboards (3 cards)
+- **Top 5 / Bottom 5** — drivers with `delivered ≥ 400` packages on the latest scorecard and `status = 'active'`, sorted by `overall_score`.
+- **Most improved (top 3)** — same eligibility on both the latest week and the week before; positive score delta only.
+
+#### Safety view donuts
+Two donut charts side by side (Impacting / Non-impacting), each showing the per-event-type breakdown for the **rolling last 7 days**. Designed for the daily Netradyne upload workflow.
+
+#### Quality view donuts
+Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows in the last 7 days) and **DSB** (defect types from `concessions WHERE impacts_dsb = true` in the last 7 days). The DSB donut deliberately reuses concessions data rather than maintaining a parallel DSB table — the underlying Amazon CSV is the same.
+
+#### Needs coaching hero
+Renders below the leaderboards on both views. Content is filtered to whichever view is active — no more in-list Safety/Quality toggle (the dashboard-level toggle handles it). Per-row inline `Log session` button pre-fills the dialog with the view's trigger context.
 
 ### 3. Drivers list (`/drivers`)
 Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.

@@ -17,6 +17,16 @@ export { QUALITY_THRESHOLDS };
 export const MIN_LEADERBOARD_DELIVERIES = 400;
 
 /**
+ * Safety tile #4 threshold: drivers flagged for intervention. A driver
+ * crosses if they had **1+ impacting OR 4+ non-impacting** events in the
+ * last 7 days. Looser cutoff for non-impacting because those are the
+ * "habits" — distractions, weaving, hard braking — that matter in
+ * aggregate, not per-instance.
+ */
+export const SAFETY_IMPACTING_THRESHOLD = 1;
+export const SAFETY_NON_IMPACTING_THRESHOLD = 4;
+
+/**
  * Server queries powering the dashboard. Everything is cached per request
  * so the four tiles + the two lists share a small set of round-trips.
  *
@@ -85,9 +95,15 @@ async function resolveWindow(): Promise<DashboardWindow> {
 
 export interface CompanyTrendPoint {
   week_ending: string;
+  // Percentage-scale metrics (0-100; higher is better).
   overall_score: number | null;
   dcr: number | null;
   pod: number | null;
+  // DPMO-scale metrics (defect rates; lower is better). Different scale,
+  // rendered on a separate chart on the Quality dashboard.
+  cdf: number | null;
+  dsb: number | null;
+  ced: number | null;
   driver_count: number; // sample size for the week (info only)
 }
 
@@ -110,7 +126,7 @@ export const getCompanyTrend = cache(
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("scorecards")
-      .select("week_ending, overall_score, dcr, pod")
+      .select("week_ending, overall_score, dcr, pod, cdf, dsb, ced")
       .order("week_ending", { ascending: false });
     if (error) {
       console.error("getCompanyTrend failed:", error);
@@ -124,47 +140,71 @@ export const getCompanyTrend = cache(
       dcrCount: number;
       podSum: number;
       podCount: number;
+      cdfSum: number;
+      cdfCount: number;
+      dsbSum: number;
+      dsbCount: number;
+      cedSum: number;
+      cedCount: number;
       driverCount: number;
     }
+    const empty = (): Accum => ({
+      overallSum: 0,
+      overallCount: 0,
+      dcrSum: 0,
+      dcrCount: 0,
+      podSum: 0,
+      podCount: 0,
+      cdfSum: 0,
+      cdfCount: 0,
+      dsbSum: 0,
+      dsbCount: 0,
+      cedSum: 0,
+      cedCount: 0,
+      driverCount: 0,
+    });
     const byWeek = new Map<string, Accum>();
     for (const r of data ?? []) {
       const wk = r.week_ending as string;
-      if (!byWeek.has(wk)) {
-        byWeek.set(wk, {
-          overallSum: 0,
-          overallCount: 0,
-          dcrSum: 0,
-          dcrCount: 0,
-          podSum: 0,
-          podCount: 0,
-          driverCount: 0,
-        });
-      }
+      if (!byWeek.has(wk)) byWeek.set(wk, empty());
       const a = byWeek.get(wk)!;
       a.driverCount += 1;
-      if (r.overall_score !== null && r.overall_score !== undefined) {
-        a.overallSum += r.overall_score;
-        a.overallCount += 1;
-      }
-      if (r.dcr !== null && r.dcr !== undefined) {
-        a.dcrSum += r.dcr;
-        a.dcrCount += 1;
-      }
-      if (r.pod !== null && r.pod !== undefined) {
-        a.podSum += r.pod;
-        a.podCount += 1;
-      }
+      const accumOne = (
+        v: unknown,
+        sumKey: "overallSum" | "dcrSum" | "podSum" | "cdfSum" | "dsbSum" | "cedSum",
+        cntKey:
+          | "overallCount"
+          | "dcrCount"
+          | "podCount"
+          | "cdfCount"
+          | "dsbCount"
+          | "cedCount",
+      ) => {
+        if (v !== null && v !== undefined && typeof v === "number") {
+          a[sumKey] += v;
+          a[cntKey] += 1;
+        }
+      };
+      accumOne(r.overall_score, "overallSum", "overallCount");
+      accumOne(r.dcr, "dcrSum", "dcrCount");
+      accumOne(r.pod, "podSum", "podCount");
+      accumOne(r.cdf, "cdfSum", "cdfCount");
+      accumOne(r.dsb, "dsbSum", "dsbCount");
+      accumOne(r.ced, "cedSum", "cedCount");
     }
+
+    const avg = (sum: number, count: number) =>
+      count > 0 ? +(sum / count).toFixed(2) : null;
 
     const points: CompanyTrendPoint[] = [...byWeek.entries()]
       .map(([week_ending, a]) => ({
         week_ending,
-        overall_score:
-          a.overallCount > 0
-            ? +(a.overallSum / a.overallCount).toFixed(2)
-            : null,
-        dcr: a.dcrCount > 0 ? +(a.dcrSum / a.dcrCount).toFixed(2) : null,
-        pod: a.podCount > 0 ? +(a.podSum / a.podCount).toFixed(2) : null,
+        overall_score: avg(a.overallSum, a.overallCount),
+        dcr: avg(a.dcrSum, a.dcrCount),
+        pod: avg(a.podSum, a.podCount),
+        cdf: avg(a.cdfSum, a.cdfCount),
+        dsb: avg(a.dsbSum, a.dsbCount),
+        ced: avg(a.cedSum, a.cedCount),
         driver_count: a.driverCount,
       }))
       .sort((a, b) => (a.week_ending < b.week_ending ? -1 : 1))
@@ -172,6 +212,480 @@ export const getCompanyTrend = cache(
     return points;
   },
 );
+
+// =============================================================================
+// SAFETY DASHBOARD QUERIES
+// =============================================================================
+
+export interface SafetyLeaderboardRow {
+  driver_id: string;
+  full_name: string;
+  impacting_count: number;
+  prior_impacting_count?: number;
+}
+
+export interface DashboardSafetyLeaderboards {
+  windowDays: number; // 7
+  fewest: SafetyLeaderboardRow[]; // top 5, low to high
+  most: SafetyLeaderboardRow[]; // bottom 5, high to low
+  mostImproved: SafetyLeaderboardRow[]; // top 3 by WoW drop
+  eligibleCount: number;
+}
+
+/**
+ * Safety leaderboards. Eligibility = drivers present in the latest scorecard
+ * (i.e. they ran routes during the latest reporting week). Ranking metric
+ * = impacting safety events in the last 7 days. Most improved compares
+ * impacting counts in days 1-7 vs. days 8-14 — biggest week-over-week
+ * drop wins. Drivers excluded if they had zero events both weeks
+ * (no "improvement" to celebrate).
+ */
+export const getDashboardSafetyLeaderboards = cache(
+  async (): Promise<DashboardSafetyLeaderboards> => {
+    const supabase = await createClient();
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const w1Start = new Date(todayUtc.getTime() - 6 * 86_400_000);
+    const w1End = new Date(todayUtc.getTime() + 86_400_000);
+    const w2Start = new Date(todayUtc.getTime() - 13 * 86_400_000);
+    const w2End = new Date(todayUtc.getTime() - 6 * 86_400_000);
+
+    // 1. Eligible drivers: those in the latest scorecard week.
+    const { data: latestWk } = await supabase
+      .from("scorecards")
+      .select("week_ending")
+      .order("week_ending", { ascending: false })
+      .limit(1);
+    const latestWeek = latestWk?.[0]?.week_ending as string | undefined;
+    if (!latestWeek) {
+      return {
+        windowDays: 7,
+        fewest: [],
+        most: [],
+        mostImproved: [],
+        eligibleCount: 0,
+      };
+    }
+
+    const [scorecardsRes, eventsThisWeekRes, eventsPriorWeekRes, driversRes] =
+      await Promise.all([
+        supabase
+          .from("scorecards")
+          .select("driver_id")
+          .eq("week_ending", latestWeek),
+        supabase
+          .from("safety_events")
+          .select("driver_id, count")
+          .eq("severity", "impacting")
+          .gte("event_date", w1Start.toISOString())
+          .lt("event_date", w1End.toISOString()),
+        supabase
+          .from("safety_events")
+          .select("driver_id, count")
+          .eq("severity", "impacting")
+          .gte("event_date", w2Start.toISOString())
+          .lt("event_date", w2End.toISOString()),
+        supabase.from("drivers").select("id, full_name").eq("status", "active"),
+      ]);
+
+    const eligibleIds = new Set<string>();
+    for (const r of scorecardsRes.data ?? []) {
+      eligibleIds.add(r.driver_id as string);
+    }
+    const activeNameMap = new Map<string, string>();
+    for (const d of driversRes.data ?? []) {
+      activeNameMap.set(d.id as string, d.full_name as string);
+    }
+
+    const thisWeekByDriver = new Map<string, number>();
+    for (const e of eventsThisWeekRes.data ?? []) {
+      const id = e.driver_id as string;
+      thisWeekByDriver.set(
+        id,
+        (thisWeekByDriver.get(id) ?? 0) + ((e.count as number) ?? 0),
+      );
+    }
+    const priorWeekByDriver = new Map<string, number>();
+    for (const e of eventsPriorWeekRes.data ?? []) {
+      const id = e.driver_id as string;
+      priorWeekByDriver.set(
+        id,
+        (priorWeekByDriver.get(id) ?? 0) + ((e.count as number) ?? 0),
+      );
+    }
+
+    // Build the eligible row set: every active driver in the latest scorecard.
+    const rows: SafetyLeaderboardRow[] = [];
+    for (const id of eligibleIds) {
+      const name = activeNameMap.get(id);
+      if (!name) continue; // status != active, skip
+      rows.push({
+        driver_id: id,
+        full_name: name,
+        impacting_count: thisWeekByDriver.get(id) ?? 0,
+        prior_impacting_count: priorWeekByDriver.get(id) ?? 0,
+      });
+    }
+
+    const byCountAsc = [...rows].sort(
+      (a, b) =>
+        a.impacting_count - b.impacting_count ||
+        a.full_name.localeCompare(b.full_name),
+    );
+    const byCountDesc = [...rows].sort(
+      (a, b) =>
+        b.impacting_count - a.impacting_count ||
+        a.full_name.localeCompare(b.full_name),
+    );
+    const fewest = byCountAsc.slice(0, 5);
+    // Bottom 5 only meaningful if there's at least one event somewhere
+    const most = byCountDesc
+      .filter((r) => r.impacting_count > 0)
+      .slice(0, 5);
+
+    // Most improved: drop = prior - this; positive drop wins.
+    const improved = rows
+      .map((r) => ({
+        ...r,
+        drop: (r.prior_impacting_count ?? 0) - r.impacting_count,
+      }))
+      .filter((r) => r.drop > 0)
+      .sort(
+        (a, b) =>
+          b.drop - a.drop || a.full_name.localeCompare(b.full_name),
+      )
+      .slice(0, 3);
+
+    return {
+      windowDays: 7,
+      fewest,
+      most,
+      mostImproved: improved,
+      eligibleCount: rows.length,
+    };
+  },
+);
+
+export interface SafetyThresholdDriver {
+  driver_id: string;
+  full_name: string;
+  impacting_count: number;
+  non_impacting_count: number;
+}
+
+/**
+ * Drivers crossing the safety-intervention threshold in the last 7 days:
+ * 1+ impacting OR 4+ non-impacting. Used for the Safety tile #4 popover.
+ */
+export const getSafetyThresholdDrivers = cache(
+  async (): Promise<SafetyThresholdDriver[]> => {
+    const supabase = await createClient();
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
+    const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
+
+    const [eventsRes, driversRes] = await Promise.all([
+      supabase
+        .from("safety_events")
+        .select("driver_id, severity, count")
+        .gte("event_date", start.toISOString())
+        .lt("event_date", endExclusive.toISOString()),
+      supabase.from("drivers").select("id, full_name").eq("status", "active"),
+    ]);
+
+    const nameMap = new Map<string, string>();
+    for (const d of driversRes.data ?? []) {
+      nameMap.set(d.id as string, d.full_name as string);
+    }
+
+    const counts = new Map<string, { imp: number; nonImp: number }>();
+    for (const e of eventsRes.data ?? []) {
+      const id = e.driver_id as string;
+      if (!counts.has(id)) counts.set(id, { imp: 0, nonImp: 0 });
+      const c = counts.get(id)!;
+      if (e.severity === "impacting") c.imp += (e.count as number) ?? 0;
+      else c.nonImp += (e.count as number) ?? 0;
+    }
+
+    const out: SafetyThresholdDriver[] = [];
+    for (const [id, c] of counts) {
+      if (
+        c.imp >= SAFETY_IMPACTING_THRESHOLD ||
+        c.nonImp >= SAFETY_NON_IMPACTING_THRESHOLD
+      ) {
+        const name = nameMap.get(id);
+        if (!name) continue;
+        out.push({
+          driver_id: id,
+          full_name: name,
+          impacting_count: c.imp,
+          non_impacting_count: c.nonImp,
+        });
+      }
+    }
+    out.sort(
+      (a, b) =>
+        b.impacting_count - a.impacting_count ||
+        b.non_impacting_count - a.non_impacting_count ||
+        a.full_name.localeCompare(b.full_name),
+    );
+    return out;
+  },
+);
+
+export interface QualityThresholdDriver {
+  driver_id: string;
+  full_name: string;
+  issues: string[];
+}
+
+/**
+ * Drivers breaking any quality threshold on their latest scorecard. Used
+ * for the Quality tile #4 popover.
+ */
+export const getQualityThresholdDrivers = cache(
+  async (): Promise<QualityThresholdDriver[]> => {
+    const supabase = await createClient();
+    const { data: latestWk } = await supabase
+      .from("scorecards")
+      .select("week_ending")
+      .order("week_ending", { ascending: false })
+      .limit(1);
+    const latestWeek = latestWk?.[0]?.week_ending as string | undefined;
+    if (!latestWeek) return [];
+
+    const [scorecardsRes, driversRes] = await Promise.all([
+      supabase
+        .from("scorecards")
+        .select("driver_id, dcr, pod, cdf, ced, dsb, dsb_count, psb")
+        .eq("week_ending", latestWeek),
+      supabase.from("drivers").select("id, full_name").eq("status", "active"),
+    ]);
+
+    const nameMap = new Map<string, string>();
+    for (const d of driversRes.data ?? []) {
+      nameMap.set(d.id as string, d.full_name as string);
+    }
+
+    const out: QualityThresholdDriver[] = [];
+    for (const sc of scorecardsRes.data ?? []) {
+      const id = sc.driver_id as string;
+      const name = nameMap.get(id);
+      if (!name) continue;
+      const issues = evaluateScorecard(sc);
+      if (issues.length === 0) continue;
+      out.push({
+        driver_id: id,
+        full_name: name,
+        issues: issues.map((i) => `${i.metric} ${i.value} (${i.threshold})`),
+      });
+    }
+    out.sort(
+      (a, b) =>
+        b.issues.length - a.issues.length ||
+        a.full_name.localeCompare(b.full_name),
+    );
+    return out;
+  },
+);
+
+// =============================================================================
+// SAFETY EVENT TYPE TREND (per-week, per-type, by severity)
+// =============================================================================
+
+export interface SafetyEventSeriesPoint {
+  week_ending: string;
+  by_type: Record<string, number>;
+  total: number;
+}
+
+/**
+ * Weekly counts per event_type for the safety company-trend chart. Returns
+ * one point per Amazon week (Sun-Sat) for the last 12 weeks. event_date
+ * gets bucketed to its Amazon-week end. Severity filter selects which
+ * series to compute — chart caller switches between the two via toggle.
+ */
+export const getSafetyEventSeries = cache(
+  async (
+    severity: "impacting" | "non_impacting",
+  ): Promise<SafetyEventSeriesPoint[]> => {
+    const supabase = await createClient();
+    const since = new Date(Date.now() - 12 * 7 * 86_400_000);
+    const { data, error } = await supabase
+      .from("safety_events")
+      .select("event_date, event_type, count")
+      .eq("severity", severity)
+      .gte("event_date", since.toISOString());
+    if (error) {
+      console.error("getSafetyEventSeries failed:", error);
+      return [];
+    }
+
+    // Compute Amazon-week ending (Sat) for a given event_date (timestamptz).
+    const weekEndOf = (iso: string): string => {
+      const d = new Date(iso);
+      const utc = new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+      );
+      const day = utc.getUTCDay(); // 0=Sun..6=Sat
+      const daysUntilSat = (6 - day + 7) % 7;
+      utc.setUTCDate(utc.getUTCDate() + daysUntilSat);
+      return utc.toISOString().slice(0, 10);
+    };
+
+    const byWeek = new Map<string, Map<string, number>>();
+    for (const e of data ?? []) {
+      const wk = weekEndOf(e.event_date as string);
+      const type = (e.event_type as string) ?? "Unknown";
+      if (!byWeek.has(wk)) byWeek.set(wk, new Map());
+      const m = byWeek.get(wk)!;
+      m.set(type, (m.get(type) ?? 0) + ((e.count as number) ?? 0));
+    }
+
+    const points: SafetyEventSeriesPoint[] = [...byWeek.entries()]
+      .map(([week_ending, m]) => {
+        const by_type: Record<string, number> = {};
+        let total = 0;
+        for (const [t, c] of m) {
+          by_type[t] = c;
+          total += c;
+        }
+        return { week_ending, by_type, total };
+      })
+      .sort((a, b) => (a.week_ending < b.week_ending ? -1 : 1))
+      .slice(-12);
+    return points;
+  },
+);
+
+// =============================================================================
+// QUALITY DONUTS — CDF Negative & DSB (from concessions)
+// =============================================================================
+
+export interface DefectMix {
+  rangeStart: string;
+  rangeEnd: string;
+  hasData: boolean;
+  byType: { type: string; count: number }[];
+  total: number;
+}
+
+/**
+ * Rolling 7-day Negative CDF mix. Aggregates feedback_types[] from
+ * cdf_negative rows where delivery_date falls in the window. A single row
+ * with multiple feedback types contributes to each type's bucket.
+ */
+export const getCdfNegativeMix = cache(async (): Promise<DefectMix> => {
+  const supabase = await createClient();
+  const now = new Date();
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
+  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
+  const rangeStart = start.toISOString().slice(0, 10);
+  const rangeEnd = todayUtc.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("cdf_negative")
+    .select("feedback_types, delivery_date")
+    .gte("delivery_date", start.toISOString())
+    .lt("delivery_date", endExclusive.toISOString());
+
+  if (error) {
+    console.error("getCdfNegativeMix failed:", error);
+    return {
+      rangeStart,
+      rangeEnd,
+      hasData: false,
+      byType: [],
+      total: 0,
+    };
+  }
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const types = (r.feedback_types as string[]) ?? [];
+    for (const t of types) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const byType = [...counts.entries()]
+    .map(([type, count]) => ({ type, count }))
+    .filter((r) => r.count > 0)
+    .sort(
+      (a, b) =>
+        b.count - a.count || a.type.localeCompare(b.type),
+    );
+  const total = byType.reduce((s, r) => s + r.count, 0);
+  return {
+    rangeStart,
+    rangeEnd,
+    hasData: byType.length > 0,
+    byType,
+    total,
+  };
+});
+
+/**
+ * Rolling 7-day DSB defect mix, sourced from concessions filtered to
+ * `impacts_dsb = true`. Aggregates defect_types[] across the window.
+ * Same DSB report Amazon exposes separately — the data is already in
+ * our concessions table.
+ */
+export const getDsbMix = cache(async (): Promise<DefectMix> => {
+  const supabase = await createClient();
+  const now = new Date();
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
+  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
+  const rangeStart = start.toISOString().slice(0, 10);
+  const rangeEnd = todayUtc.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("concessions")
+    .select("defect_types, concession_date, impacts_dsb")
+    .eq("impacts_dsb", true)
+    .gte("concession_date", start.toISOString())
+    .lt("concession_date", endExclusive.toISOString());
+
+  if (error) {
+    console.error("getDsbMix failed:", error);
+    return {
+      rangeStart,
+      rangeEnd,
+      hasData: false,
+      byType: [],
+      total: 0,
+    };
+  }
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const types = (r.defect_types as string[]) ?? [];
+    for (const t of types) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+  const byType = [...counts.entries()]
+    .map(([type, count]) => ({ type, count }))
+    .filter((r) => r.count > 0)
+    .sort(
+      (a, b) =>
+        b.count - a.count || a.type.localeCompare(b.type),
+    );
+  const total = byType.reduce((s, r) => s + r.count, 0);
+  return {
+    rangeStart,
+    rangeEnd,
+    hasData: byType.length > 0,
+    byType,
+    total,
+  };
+});
 
 export interface LeaderboardRow {
   driver_id: string;

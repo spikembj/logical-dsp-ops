@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ChevronDown, ChevronUp, ShieldAlert, FileWarning } from "lucide-react";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { LogSessionDialog } from "@/components/app/coaching/log-session-dialog";
 import { qualityPrefill, safetyPrefill } from "@/lib/util/coaching-prefill";
 import type { DashboardData } from "@/lib/queries/dashboard";
-import { cn } from "@/lib/utils";
 
 const COUNT_OPTIONS = [15, 30, 50, "all"] as const;
 type CountOption = (typeof COUNT_OPTIONS)[number];
@@ -16,12 +15,19 @@ type Mode = "safety" | "quality";
 type Row = DashboardData["needsCoachingSafety"][number];
 
 interface Props {
+  mode: Mode;
   safety: DashboardData["needsCoachingSafety"];
   quality: DashboardData["needsCoachingQuality"];
 }
 
-export function NeedsCoachingList({ safety, quality }: Props) {
-  const [mode, setMode] = useState<Mode>("safety");
+/**
+ * Full-width hero list of drivers needing coaching this week. The
+ * Safety/Quality split now happens at the dashboard view level, so this
+ * component just renders the list for whichever mode the parent passed
+ * in — no internal toggle. Each row has a Log Session button that pre-
+ * fills the dialog with that mode's trigger context.
+ */
+export function NeedsCoachingList({ mode, safety, quality }: Props) {
   const [count, setCount] = useState<CountOption>(15);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -31,9 +37,15 @@ export function NeedsCoachingList({ safety, quality }: Props) {
     return list.slice(0, count);
   }, [list, count]);
 
+  const heading =
+    mode === "safety" ? "Needs safety coaching" : "Needs quality coaching";
+  const empty =
+    mode === "safety"
+      ? "No drivers with uncoached impacting safety events. 🎉"
+      : "No drivers with quality issues this week. 🎉";
+
   return (
     <section className="space-y-2">
-      {/* Header bar: title, mode toggle, count selector, collapse */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -46,61 +58,13 @@ export function NeedsCoachingList({ safety, quality }: Props) {
           ) : (
             <ChevronDown className="h-4 w-4" />
           )}
-          Needs coaching this week
+          {heading}
+          <span className="ml-1 inline-flex items-center justify-center min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-[10px] font-semibold bg-muted text-foreground/70">
+            {list.length}
+          </span>
         </button>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Safety / Quality toggle */}
-          <div className="inline-flex rounded-md border bg-card p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setMode("safety")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 rounded-sm transition-colors",
-                mode === "safety"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <ShieldAlert className="h-3.5 w-3.5" />
-              Safety
-              <span
-                className={cn(
-                  "ml-1 inline-flex items-center justify-center min-w-[1.25rem] rounded-full px-1 text-[10px] font-semibold",
-                  mode === "safety"
-                    ? "bg-background/20"
-                    : "bg-muted text-foreground/60",
-                )}
-              >
-                {safety.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("quality")}
-              className={cn(
-                "inline-flex items-center gap-1 px-2.5 py-1 rounded-sm transition-colors",
-                mode === "quality"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <FileWarning className="h-3.5 w-3.5" />
-              Quality
-              <span
-                className={cn(
-                  "ml-1 inline-flex items-center justify-center min-w-[1.25rem] rounded-full px-1 text-[10px] font-semibold",
-                  mode === "quality"
-                    ? "bg-background/20"
-                    : "bg-muted text-foreground/60",
-                )}
-              >
-                {quality.length}
-              </span>
-            </button>
-          </div>
-
-          {/* Show-N picker */}
           <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             Show
             <select
@@ -128,11 +92,7 @@ export function NeedsCoachingList({ safety, quality }: Props) {
         <>
           {list.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                {mode === "safety"
-                  ? "No drivers with uncoached impacting safety events. 🎉"
-                  : "No drivers with quality issues this week. 🎉"}
-              </p>
+              <p className="text-sm text-muted-foreground">{empty}</p>
             </div>
           ) : (
             <ul className="rounded-xl border bg-card divide-y">
@@ -225,6 +185,3 @@ function RowItem({ d, mode }: { d: Row; mode: Mode }) {
     </li>
   );
 }
-
-// Re-export so it can be a server-imported barrel later if we want.
-export { ChevronUp };
