@@ -93,31 +93,31 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <header className="space-y-1">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Performance</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Hi {getFirstName(me)} —{" "}
-            <span className="text-foreground font-medium">
-              Week {week}, {formatHeaderDate(today)}
-            </span>
-            <span className="text-xs">
-              {" · "}
-              {data.stats.activeDriverCount}{" "}
-              {data.stats.activeDriverCount === 1 ? "active driver" : "active drivers"}
-            </span>
-            {data.window.asOf !== today.toISOString().slice(0, 10) && (
-              <>
-                {" "}
-                <span className="text-xs">
-                  (data through{" "}
-                  {format(new Date(`${data.window.asOf}T12:00:00Z`), "MMM d")})
-                </span>
-              </>
-            )}
-          </p>
+          <ViewToggle current={view} />
         </div>
-        <ViewToggle current={view} />
+        <p className="text-sm text-muted-foreground">
+          Hi {getFirstName(me)} —{" "}
+          <span className="text-foreground font-medium">
+            Week {week}, {formatHeaderDate(today)}
+          </span>
+          <span className="text-xs">
+            {" · "}
+            {data.stats.activeDriverCount}{" "}
+            {data.stats.activeDriverCount === 1 ? "active driver" : "active drivers"}
+          </span>
+          {data.window.asOf !== today.toISOString().slice(0, 10) && (
+            <>
+              {" "}
+              <span className="text-xs">
+                (data through{" "}
+                {format(new Date(`${data.window.asOf}T12:00:00Z`), "MMM d")})
+              </span>
+            </>
+          )}
+        </p>
       </header>
 
       {view === "safety" ? (
