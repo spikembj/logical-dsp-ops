@@ -95,7 +95,7 @@ Summary of where the original spec was extended/changed:
 │   ├── seed-drivers.sql
 │   ├── seed.sql
 │   └── cleanup-netradyne-ids.sql
-├── middleware.ts                # Root middleware → updateSession
+├── proxy.ts                     # Root proxy (Next 16 rename of middleware) → updateSession
 ├── next.config.ts               # serverExternalPackages: ["pdfjs-dist"]
 ├── package.json
 ├── tsconfig.json
