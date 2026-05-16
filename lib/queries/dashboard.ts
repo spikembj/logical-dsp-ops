@@ -578,19 +578,21 @@ export interface DefectMix {
 /**
  * Window helper for Quality dashboard surfaces (CDF donut, DSB donut,
  * negative-CDF tile #2). Returns the Sun-Sat Amazon week containing the
- * **most recent date across scorecards, cdf_negative, and concessions**.
+ * **most recent delivery_date across cdf_negative and DSB-impacting
+ * concessions**.
  *
- * Why max-of-all and not just the latest scorecard: Amazon publishes
- * scorecards a day or two into the following week, but CDF Negative and
- * Concessions can show up first (or be uploaded ahead). If we anchored
- * strictly to the scorecard week, fresh CDF/concession data for the
- * current week would silently fall outside the window. Taking the max
- * keeps the donuts honest about what data is actually on file.
+ * Scorecards are intentionally NOT consulted here. Scorecards can land
+ * for a week before the matching CDF / concessions data is uploaded (or
+ * the user might have a preliminary in-progress scorecard from a partial
+ * DSP Overview upload). If we picked the scorecard week, the donuts
+ * could show "Week N" with no data while the user has Week N-1 CDF/DSB
+ * data sitting right there. Better to follow each donut's own data
+ * source — what you uploaded is what you see.
  *
- * Leaderboards still anchor to the latest scorecard week directly (they
- * need overall_score), so the donut and leaderboard subtitles may name
- * different weeks during the early-week scorecard gap — each surface
- * shows its own week explicitly.
+ * Leaderboards continue to anchor to the latest scorecard week directly
+ * (they need overall_score), so the donut and leaderboard subtitles may
+ * name different weeks during scorecard-vs-defect upload gaps — each
+ * surface labels its own week explicitly so there's no confusion.
  */
 interface ScorecardWeekRange {
   /** YYYY-MM-DD Sunday */
@@ -623,12 +625,9 @@ const getLatestScorecardWeekRange = cache(
     // For concessions we look at delivery_date (when the package shipped),
     // not concession_date (when Amazon filed the concession) — the donut
     // is about "defects on packages delivered this week" for coaching.
-    const [scWk, cdfMax, concMax] = await Promise.all([
-      supabase
-        .from("scorecards")
-        .select("week_ending")
-        .order("week_ending", { ascending: false })
-        .limit(1),
+    // Restrict to impacts_dsb rows so the anchor matches the DSB donut's
+    // filter exactly.
+    const [cdfMax, concMax] = await Promise.all([
       supabase
         .from("cdf_negative")
         .select("delivery_date")
@@ -637,22 +636,21 @@ const getLatestScorecardWeekRange = cache(
       supabase
         .from("concessions")
         .select("delivery_date")
+        .eq("impacts_dsb", true)
         .not("delivery_date", "is", null)
         .order("delivery_date", { ascending: false })
         .limit(1),
     ]);
 
     const candidates: string[] = [];
-    const scEnd = scWk.data?.[0]?.week_ending as string | undefined;
-    if (scEnd) candidates.push(scEnd);
     const cdfRaw = cdfMax.data?.[0]?.delivery_date as string | undefined;
     if (cdfRaw) candidates.push(cdfRaw.slice(0, 10));
     const concRaw = concMax.data?.[0]?.delivery_date as string | undefined;
     if (concRaw) candidates.push(concRaw.slice(0, 10));
 
     if (candidates.length === 0) return null;
-    // Take the most recent calendar day across all three sources, then
-    // expand to its Sun-Sat week.
+    // Take the most recent calendar day across the two defect sources,
+    // then expand to its Sun-Sat week.
     const latest = candidates.sort().at(-1)!;
     return weekRangeContaining(latest);
   },
