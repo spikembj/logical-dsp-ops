@@ -292,7 +292,7 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
 ## Audit & Data Integrity Rules
 
 - **Coaching sessions:** all UPDATEs flow through the audit trigger. Edits + void/unvoid + acknowledge toggles all snapshot prior state to `coaching_session_revisions`. Voids preserve the original row (soft-delete with required reason).
-- **File imports:** every imported row links back to its `file_imports` row. File-hash re-import detection deferred to step 8.
+- **File imports:** every imported row links back to its `file_imports` row. **Duplicate uploads are hard-blocked** by SHA-256 hash on `file_imports.file_hash` — re-uploading the exact same bytes returns an error naming the original upload's date, filename, and import type. Applies globally across all 7 import types. Intentional re-uploads require renaming the file (any byte change forces a new hash).
 - **Drivers:** never hard-deleted. Status flips to `terminated` (manual) or `inactive` (auto, reversible). Coaching history survives.
 - **Timestamps:** every table has `created_at`. User-facing edits track `updated_at`.
 
@@ -311,7 +311,6 @@ The user has flagged these as planned future scope, not part of Phase 1:
 ## Deferred
 
 Schema and code support these but the UX hasn't shipped:
-- **File-hash re-import detection** — `file_imports.file_hash` exists; helper `lib/parsing/file-hash.ts` exists; not wired into actions. Low ops impact for the current team size.
 - **Linked scorecard / event UI on coaching sessions** — `coaching_sessions.linked_scorecard_id` and `linked_event_ids` exist; no picker UI yet.
 - **Downloadable error CSVs** — errors are stored in `file_imports.errors` JSONB; UI shows a collapsible list but no download.
 

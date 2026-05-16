@@ -7,6 +7,11 @@ import {
   type ParsedPodDriver,
   type ParsedPodDetails,
 } from "@/lib/parsing/pod-details-pdf";
+import {
+  findDuplicateImport,
+  formatDuplicateError,
+  sha256OfBytes,
+} from "@/lib/parsing/file-hash";
 
 export interface PodDetailsImportSummary {
   ok: boolean;
@@ -39,9 +44,13 @@ export async function importPodDetailsPdf(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = sha256OfBytes(bytes);
+  const dup = await findDuplicateImport(supabase, hash);
+  if (dup) return { ok: false, error: formatDuplicateError(dup) };
+
   let parsed: ParsedPodDetails;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
     parsed = await parsePodDetailsPdf(bytes, file.name);
   } catch (e) {
     console.error("parsePodDetailsPdf failed:", e);
@@ -70,6 +79,7 @@ export async function importPodDetailsPdf(
       uploaded_by: user.id,
       import_type: "pod_details",
       file_name: fileName,
+      file_hash: hash,
       row_count: parsed.drivers.length,
     })
     .select("id")

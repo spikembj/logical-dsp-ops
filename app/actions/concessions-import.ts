@@ -7,6 +7,11 @@ import {
   type ParsedConcession,
   type ParsedConcessionsReport,
 } from "@/lib/parsing/concessions-csv";
+import {
+  findDuplicateImport,
+  formatDuplicateError,
+  sha256OfBytes,
+} from "@/lib/parsing/file-hash";
 
 export interface ConcessionsImportSummary {
   ok: boolean;
@@ -39,9 +44,14 @@ export async function importConcessionsCsv(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = sha256OfBytes(bytes);
+  const dup = await findDuplicateImport(supabase, hash);
+  if (dup) return { ok: false, error: formatDuplicateError(dup) };
+
   let parsed: ParsedConcessionsReport;
   try {
-    const text = await file.text();
+    const text = new TextDecoder("utf-8").decode(bytes);
     parsed = parseConcessionsCsv(text);
   } catch (e) {
     console.error("parseConcessionsCsv failed:", e);
@@ -70,6 +80,7 @@ export async function importConcessionsCsv(
       uploaded_by: user.id,
       import_type: "concessions",
       file_name: fileName,
+      file_hash: hash,
       row_count: parsed.concessions.length,
     })
     .select("id")

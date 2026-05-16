@@ -7,6 +7,11 @@ import {
   type ParsedDspOverviewDriver,
   type ParsedDspOverviewReport,
 } from "@/lib/parsing/dsp-overview-csv";
+import {
+  findDuplicateImport,
+  formatDuplicateError,
+  sha256OfBytes,
+} from "@/lib/parsing/file-hash";
 
 /**
  * Server action: accept an uploaded DSP Overview Dashboard CSV, parse it,
@@ -51,10 +56,15 @@ export async function importDspOverviewCsv(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  // 1. Read + parse
+  // 1. Read bytes, hash, refuse exact re-uploads, then parse.
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = sha256OfBytes(bytes);
+  const dup = await findDuplicateImport(supabase, hash);
+  if (dup) return { ok: false, error: formatDuplicateError(dup) };
+
   let parsed: ParsedDspOverviewReport;
   try {
-    const text = await file.text();
+    const text = new TextDecoder("utf-8").decode(bytes);
     parsed = parseDspOverviewCsv(text);
   } catch (e) {
     console.error("parseDspOverviewCsv failed:", e);
@@ -85,6 +95,7 @@ export async function importDspOverviewCsv(
       uploaded_by: user.id,
       import_type: "scorecard", // same destination table
       file_name: fileName,
+      file_hash: hash,
       row_count: parsed.drivers.length,
     })
     .select("id")

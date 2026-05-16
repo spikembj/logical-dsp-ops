@@ -7,6 +7,11 @@ import {
   type ParsedEscalation,
   type ParsedEscalationsReport,
 } from "@/lib/parsing/escalations-csv";
+import {
+  findDuplicateImport,
+  formatDuplicateError,
+  sha256OfBytes,
+} from "@/lib/parsing/file-hash";
 
 export interface EscalationsImportSummary {
   ok: boolean;
@@ -39,9 +44,14 @@ export async function importEscalationsCsv(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const hash = sha256OfBytes(bytes);
+  const dup = await findDuplicateImport(supabase, hash);
+  if (dup) return { ok: false, error: formatDuplicateError(dup) };
+
   let parsed: ParsedEscalationsReport;
   try {
-    const text = await file.text();
+    const text = new TextDecoder("utf-8").decode(bytes);
     parsed = parseEscalationsCsv(text);
   } catch (e) {
     console.error("parseEscalationsCsv failed:", e);
@@ -70,6 +80,7 @@ export async function importEscalationsCsv(
       uploaded_by: user.id,
       import_type: "escalations",
       file_name: fileName,
+      file_hash: hash,
       row_count: parsed.escalations.length,
     })
     .select("id")
