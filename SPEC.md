@@ -317,7 +317,8 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
    - ✅ Wave 3: Concessions CSV + CDF Negative CSV (also surfaced on Performance tab as summary cards instead of a separate Defects tab)
    - ✅ Wave 4: POD Details PDF (with reject-reason breakdown card on Performance tab)
 7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Employees page (CRUD with position + standard_parcel rename).
-8. ✅ Polish: Recharts multi-line trend chart on Performance tab. **Deferred items:** file-hash re-import detection, downloadable error CSVs, additional empty-state refinement (the existing ones already explain themselves).
+8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
+9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
 
 ## Audit & Data Integrity Rules
 
@@ -329,8 +330,8 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
 ## Environment / Config
 
 - Default timezone for week boundaries: `America/Denver` (set via `NEXT_PUBLIC_DEFAULT_TZ`).
-- Amazon DSP weeks are Sunday-through-Saturday. Helpers: `amazonWeekEnding(week, year)` and `amazonWeekFromEndingDate(weekEnding)` in `lib/format/dates.ts`.
-- pdfjs-dist is marked as a serverExternalPackage in `next.config.ts` so the Node build's worker file resolves at runtime.
+- Amazon DSP weeks are Sunday-through-Saturday. **Amazon's Week 1 of a year = the Sun-Sat week containing Jan 1** (so Week 1 can extend into the prior calendar year — Week 1 of 2026 starts Sun Dec 28, 2025). Helpers: `amazonWeekEnding(week, year)` and `amazonWeekFromEndingDate(weekEnding)` in `lib/format/dates.ts`.
+- pdfjs-dist is marked as a serverExternalPackage in `next.config.ts` so the Node build's worker file resolves at runtime. `@napi-rs/canvas` provides the `DOMMatrix`/`Path2D`/`ImageData` globals that pdfjs needs on Vercel's stricter Node runtime (polyfill at `lib/parsing/pdfjs-node-polyfill.ts`, imported before any pdfjs dynamic import).
 
 ## Future / Out of Phase 1
 
@@ -344,6 +345,7 @@ The user has flagged these as planned future scope, not part of Phase 1:
 Schema and code support these but the UX hasn't shipped:
 - **Linked scorecard / event UI on coaching sessions** — `coaching_sessions.linked_scorecard_id` and `linked_event_ids` exist; no picker UI yet.
 - **Downloadable error CSVs** — errors are stored in `file_imports.errors` JSONB; UI shows a collapsible list but no download.
+- **Per-period tracking on `file_imports`** — would add `period_start` / `period_end` columns and require parser updates. Originally proposed for donut alignment, but the donut anchor now reads dates from the data sources directly (CDF `delivery_date`, DSB `concession_date`), so this is purely audit-trail nice-to-have. Low priority.
 
 ## Out of Scope (Phase 1)
 
