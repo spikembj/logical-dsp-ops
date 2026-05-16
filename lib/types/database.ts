@@ -68,6 +68,8 @@ export interface UserRow {
   role: UserRole;
   active: boolean;
   created_at: string;
+  /** Optional FK to drivers — for dispatchers who also drive routes. */
+  driver_id: string | null;
 }
 
 export interface DriverRow {

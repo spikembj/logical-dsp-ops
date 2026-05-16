@@ -63,7 +63,7 @@ Role is set by management when a teammate is invited. Stored on `users` table. T
 - *Edit content (topic / notes / date / type)*: management only
 - *Void / unvoid*: management only
 
-> **Edge case noted in build:** some dispatchers also drive (e.g. Colby, Manuel, Athena). Today they have **two records linked by name** — a `public.users` row (dispatcher login) and a `public.drivers` row (driver record). No FK between them yet; future work could add an explicit link or "Also a driver" badge.
+> **Dispatchers who also drive:** some dispatchers (e.g. Colby, Manuel, Athena) also run routes. `users.driver_id` is a nullable FK to `drivers.id` linking the two records; one-to-one enforced by a partial unique index. The Management page exposes a picker to set or clear the link. `is_management()` ignores this column — driving doesn't grant management permissions.
 
 ## Data Model
 
@@ -268,7 +268,7 @@ Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","man
 Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows **for all imports except Netradyne** (see above).
 
 ### 7. Management (`/admin/users`)
-Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout.
+Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout. **Driver record column** links a user to a `drivers` row when they also drive routes (e.g. dispatchers who run occasional shifts) — linked rows show the driver's name as a clickable link to the driver profile, with a small unlink button next to it. Unlinked rows show a "Link…" picker dialog that searches active, not-yet-linked drivers. One-to-one enforced by a partial unique index on `users.driver_id`.
 
 ### 8. Employees (`/admin/employees`)
 Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision with the public-facing Drivers list). Searchable + status-filterable list with per-row Edit dialog and Add employee dialog at the top. Covers both drivers and helpers — Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
@@ -306,7 +306,8 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
 
 The user has flagged these as planned future scope, not part of Phase 1:
 - **More dashboards:** Ops & daily planning, Fleet tracking, HR (onboarding/offboarding). Each will sit at its own `/<dashboard>` route. The current home dashboard is intentionally named **Performance** for that reason.
-- **Dispatcher ↔ driver linkage:** some dispatchers also drive routes (Colby, Manuel, Athena). Today they're two unlinked records (one in `users`, one in `drivers`). Future: explicit FK or a "Has a driver record" badge on the management page.
+<!-- Dispatcher ↔ driver linkage shipped — see Management page section above. -->
+- (no items pending)
 
 ## Deferred
 

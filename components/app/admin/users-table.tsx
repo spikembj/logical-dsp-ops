@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { UserPlus } from "lucide-react";
+import { Link2, Link2Off, Search, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +28,12 @@ import {
 import {
   inviteUser,
   setUserActive,
+  setUserDriverLink,
   setUserRole,
 } from "@/app/actions/users";
 import { formatSessionDate } from "@/lib/format/dates";
-import type { UserRole, UserRow } from "@/lib/types/database";
+import type { UserRole } from "@/lib/types/database";
+import type { UserListItem } from "@/lib/queries/users";
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: "owner", label: "Owner" },
@@ -52,12 +55,19 @@ const ROLE_LABEL: Record<UserRole, string> = {
   manager: "Ops Manager",
 };
 
+interface LinkableDriver {
+  id: string;
+  full_name: string;
+}
+
 export function UsersAdmin({
   users,
   myUserId,
+  linkableDrivers,
 }: {
-  users: UserRow[];
+  users: UserListItem[];
   myUserId: string;
+  linkableDrivers: LinkableDriver[];
 }) {
   return (
     <div className="space-y-4">
@@ -74,6 +84,7 @@ export function UsersAdmin({
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Driver record</TableHead>
               <TableHead>Active</TableHead>
               <TableHead className="hidden md:table-cell">Joined</TableHead>
             </TableRow>
@@ -84,6 +95,7 @@ export function UsersAdmin({
                 key={u.id}
                 user={u}
                 isMe={u.id === myUserId}
+                linkableDrivers={linkableDrivers}
               />
             ))}
           </TableBody>
@@ -93,7 +105,15 @@ export function UsersAdmin({
   );
 }
 
-function UserRowItem({ user, isMe }: { user: UserRow; isMe: boolean }) {
+function UserRowItem({
+  user,
+  isMe,
+  linkableDrivers,
+}: {
+  user: UserListItem;
+  isMe: boolean;
+  linkableDrivers: LinkableDriver[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -104,7 +124,7 @@ function UserRowItem({ user, isMe }: { user: UserRow; isMe: boolean }) {
         toast.error(res.error);
         return;
       }
-      toast.success(`Role updated to ${role}.`);
+      toast.success(`Role updated to ${ROLE_LABEL[role]}.`);
       router.refresh();
     });
   }
@@ -116,6 +136,20 @@ function UserRowItem({ user, isMe }: { user: UserRow; isMe: boolean }) {
         return;
       }
       toast.success(active ? "Reactivated." : "Deactivated.");
+      router.refresh();
+    });
+  }
+  function handleUnlink() {
+    startTransition(async () => {
+      const res = await setUserDriverLink({
+        user_id: user.id,
+        driver_id: null,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Driver link removed.");
       router.refresh();
     });
   }
@@ -146,6 +180,35 @@ function UserRowItem({ user, isMe }: { user: UserRow; isMe: boolean }) {
         </select>
       </TableCell>
       <TableCell>
+        {user.linked_driver ? (
+          <div className="inline-flex items-center gap-1.5 text-sm">
+            <Link
+              href={`/drivers/${user.linked_driver.id}`}
+              className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
+              title="Open driver profile"
+            >
+              <Link2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+              {user.linked_driver.full_name}
+            </Link>
+            <button
+              type="button"
+              onClick={handleUnlink}
+              disabled={pending}
+              className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+              title="Unlink driver"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <LinkDriverDialog
+            userId={user.id}
+            userName={user.full_name ?? user.email}
+            linkableDrivers={linkableDrivers}
+          />
+        )}
+      </TableCell>
+      <TableCell>
         <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
@@ -167,6 +230,122 @@ function UserRowItem({ user, isMe }: { user: UserRow; isMe: boolean }) {
         {formatSessionDate(user.created_at.slice(0, 10))}
       </TableCell>
     </TableRow>
+  );
+}
+
+/**
+ * Picker dialog for linking a user to a driver. Searchable list of active
+ * drivers (excluding any already linked to another user — that filter is
+ * applied at page-load time and passed in via linkableDrivers).
+ */
+function LinkDriverDialog({
+  userId,
+  userName,
+  linkableDrivers,
+}: {
+  userId: string;
+  userName: string;
+  linkableDrivers: LinkableDriver[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [pending, startTransition] = useTransition();
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return linkableDrivers.slice(0, 50);
+    return linkableDrivers
+      .filter((d) => d.full_name.toLowerCase().includes(q))
+      .slice(0, 50);
+  }, [query, linkableDrivers]);
+
+  function handleSelect(driverId: string) {
+    startTransition(async () => {
+      const res = await setUserDriverLink({
+        user_id: userId,
+        driver_id: driverId,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Driver linked.");
+      setOpen(false);
+      setQuery("");
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) setQuery("");
+      }}
+    >
+      <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1 text-xs text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-colors">
+        <Link2Off className="h-3 w-3" />
+        Link…
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Link {userName} to a driver record</DialogTitle>
+          <DialogDescription>
+            Pick the matching driver. Only active drivers not already linked
+            to another user appear here.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="flex items-center h-9 w-full rounded-lg border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+            <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              placeholder="Search drivers"
+              autoFocus
+              className="flex-1 min-w-0 px-2 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto rounded-md border">
+            {filtered.length === 0 ? (
+              <p className="p-4 text-center text-xs text-muted-foreground">
+                {linkableDrivers.length === 0
+                  ? "No linkable drivers — every active driver is already linked."
+                  : "No matches."}
+              </p>
+            ) : (
+              <ul>
+                {filtered.map((d) => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleSelect(d.id)}
+                      disabled={pending}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/40 disabled:opacity-50"
+                    >
+                      {d.full_name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setOpen(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

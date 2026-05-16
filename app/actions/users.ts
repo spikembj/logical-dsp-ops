@@ -30,6 +30,10 @@ const SetActiveSchema = z.object({
   user_id: z.string().uuid(),
   active: z.boolean(),
 });
+const SetDriverLinkSchema = z.object({
+  user_id: z.string().uuid(),
+  driver_id: z.string().uuid().nullable(),
+});
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -128,6 +132,31 @@ export async function setUserActive(
   const { error } = await supabase
     .from("users")
     .update({ active: parsed.data.active })
+    .eq("id", parsed.data.user_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+/**
+ * Link a user to a driver record (or clear the link with driver_id: null).
+ * Enforced one-to-one via a partial unique index — attempting to link a
+ * driver that's already linked to another user surfaces the DB constraint
+ * error verbatim, which is fine for this admin-only screen.
+ */
+export async function setUserDriverLink(
+  input: z.infer<typeof SetDriverLinkSchema>,
+): Promise<ActionResult> {
+  const gate = await requireManagement();
+  if (!gate.ok) return gate;
+  const parsed = SetDriverLinkSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]!.message };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("users")
+    .update({ driver_id: parsed.data.driver_id })
     .eq("id", parsed.data.user_id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/users");
