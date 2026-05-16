@@ -8,6 +8,7 @@ import {
   Tooltip,
 } from "recharts";
 import { format, parseISO } from "date-fns";
+import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import type { DefectMix } from "@/lib/queries/dashboard";
 
 const PALETTE = [
@@ -43,15 +44,28 @@ export function QualityDonuts({
   cdf: DefectMix;
   dsb: DefectMix;
 }) {
-  // Both mixes share the same window; surface it once at the section level.
-  const startLabel = format(parseISO(cdf.rangeStart), "MMM d");
-  const endLabel = format(parseISO(cdf.rangeEnd), "MMM d");
+  // Both mixes share the same window (latest scorecard week, Sun-Sat).
+  // Surface it once at the section level. If there are no scorecards yet,
+  // rangeStart/rangeEnd are empty strings — show a fallback subtitle.
+  const haveRange = cdf.rangeStart !== "" && cdf.rangeEnd !== "";
+  const startLabel = haveRange
+    ? format(parseISO(cdf.rangeStart), "MMM d")
+    : null;
+  const endLabel = haveRange
+    ? format(parseISO(cdf.rangeEnd), "MMM d")
+    : null;
+  const weekNumber = haveRange
+    ? amazonWeekFromEndingDate(cdf.rangeEnd).week
+    : null;
+
   return (
     <section className="space-y-3">
       <div>
         <h2 className="text-base font-medium">Quality defect mix</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Rolling last 7 days · {startLabel} – {endLabel}
+          {haveRange
+            ? `Week ${weekNumber} · ${startLabel} – ${endLabel}`
+            : "No scorecard week on file yet"}
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

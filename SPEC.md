@@ -236,7 +236,7 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY} · {N} active drivers`. I
 
 #### Quality view stat tiles (4)
 - **Avg overall score** — average across all drivers in the latest scorecard week.
-- **Drivers with negative CDF** — distinct drivers with one or more `cdf_negative` rows in the rolling last 7 days. Useful for sizing the "how many people gave us customer complaints this week" problem.
+- **Drivers with negative CDF** — distinct drivers with one or more `cdf_negative` rows in the **latest scorecard week** (Sun-Sat). Same window as the CDF donut below, so the tile count and the donut total match.
 - **Coaching sessions** — logged this week.
 - **Below threshold** — drivers breaking any quality threshold (DCR / POD / CDF DPMO / CED / DSB DPMO / DSB Count / PSB) on the latest scorecard. Clickable dialog with the list.
 
@@ -262,7 +262,7 @@ Same simple unweighted average across all drivers per week — no minimum-volume
 Two donut charts side by side (Impacting / Non-impacting), each showing the per-event-type breakdown for the **rolling last 7 days**. Designed for the daily Netradyne upload workflow.
 
 #### Quality view donuts
-Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows in the last 7 days) and **DSB** (defect types from `concessions WHERE impacts_dsb = true` in the last 7 days). The DSB donut deliberately reuses concessions data rather than maintaining a parallel DSB table — the underlying Amazon CSV is the same.
+Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows whose `delivery_date` falls in the latest scorecard week) and **DSB** (defect types from `concessions WHERE impacts_dsb = true` whose `concession_date` falls in the same week). The window is the Sun-Sat Amazon week of the most recent scorecard upload — keeps the donuts, tile #2, leaderboards, and tile #4 all telling the same week's story. CDF Negative and Concessions arrive as weekly Amazon reports, so a rolling-7-day window would usually be empty between uploads; scorecard-week alignment fixes that. The DSB donut deliberately reuses concessions data rather than maintaining a parallel DSB table — the underlying Amazon CSV is the same.
 
 #### Needs coaching hero
 Renders below the leaderboards on both views. Content is filtered to whichever view is active — no more in-list Safety/Quality toggle (the dashboard-level toggle handles it). Per-row inline `Log session` button pre-fills the dialog with the view's trigger context.

@@ -576,26 +576,69 @@ export interface DefectMix {
 }
 
 /**
- * Rolling 7-day Negative CDF mix. Aggregates feedback_types[] from
- * cdf_negative rows where delivery_date falls in the window. A single row
- * with multiple feedback types contributes to each type's bucket.
+ * Quality dashboard data — CDF/DSB donuts + the negative-CDF tile — is
+ * anchored to the **latest scorecard week** (Sun-Sat), not a rolling 7
+ * days. CDF Negative and Concessions ship as weekly Amazon reports, so
+ * aligning their donut window to the scorecard week keeps all of Quality
+ * dashboard's "this week" surfaces telling the same story. Returns null
+ * if no scorecards exist yet.
+ */
+interface ScorecardWeekRange {
+  /** YYYY-MM-DD Sunday */
+  rangeStart: string;
+  /** YYYY-MM-DD Saturday */
+  rangeEnd: string;
+  /** ISO timestamp at Sunday 00:00 UTC */
+  startIso: string;
+  /** ISO timestamp at Saturday+1 00:00 UTC (exclusive upper bound) */
+  endExclusiveIso: string;
+}
+const getLatestScorecardWeekRange = cache(
+  async (): Promise<ScorecardWeekRange | null> => {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("scorecards")
+      .select("week_ending")
+      .order("week_ending", { ascending: false })
+      .limit(1);
+    const weekEnding = data?.[0]?.week_ending as string | undefined;
+    if (!weekEnding) return null;
+    const end = new Date(`${weekEnding}T00:00:00Z`);
+    const start = new Date(end.getTime() - 6 * 86_400_000);
+    const endExclusive = new Date(end.getTime() + 86_400_000);
+    return {
+      rangeStart: start.toISOString().slice(0, 10),
+      rangeEnd: end.toISOString().slice(0, 10),
+      startIso: start.toISOString(),
+      endExclusiveIso: endExclusive.toISOString(),
+    };
+  },
+);
+
+/**
+ * Negative CDF mix for the latest scorecard week. Aggregates feedback_types[]
+ * from cdf_negative rows whose delivery_date falls in that Sun-Sat range.
+ * A single row with multiple feedback types contributes to each type's bucket.
  */
 export const getCdfNegativeMix = cache(async (): Promise<DefectMix> => {
   const supabase = await createClient();
-  const now = new Date();
-  const todayUtc = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
-  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
-  const rangeStart = start.toISOString().slice(0, 10);
-  const rangeEnd = todayUtc.toISOString().slice(0, 10);
+  const range = await getLatestScorecardWeekRange();
+  if (!range) {
+    return {
+      rangeStart: "",
+      rangeEnd: "",
+      hasData: false,
+      byType: [],
+      total: 0,
+    };
+  }
+  const { rangeStart, rangeEnd, startIso, endExclusiveIso } = range;
 
   const { data, error } = await supabase
     .from("cdf_negative")
     .select("feedback_types, delivery_date")
-    .gte("delivery_date", start.toISOString())
-    .lt("delivery_date", endExclusive.toISOString());
+    .gte("delivery_date", startIso)
+    .lt("delivery_date", endExclusiveIso);
 
   if (error) {
     console.error("getCdfNegativeMix failed:", error);
@@ -631,29 +674,20 @@ export const getCdfNegativeMix = cache(async (): Promise<DefectMix> => {
 });
 
 /**
- * Rolling 7-day DSB defect mix, sourced from concessions filtered to
- * `impacts_dsb = true`. Aggregates defect_types[] across the window.
- * Same DSB report Amazon exposes separately — the data is already in
- * our concessions table.
- */
-/**
  * Distinct count of drivers with one or more cdf_negative rows in the
- * rolling last 7 days. Drives the Quality tile #2.
+ * latest scorecard week. Drives the Quality tile #2. Same window as the
+ * CDF donut so the tile count and the donut total match.
  */
 export const getNegativeCdfDriverCount = cache(async (): Promise<number> => {
   const supabase = await createClient();
-  const now = new Date();
-  const todayUtc = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
-  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
+  const range = await getLatestScorecardWeekRange();
+  if (!range) return 0;
 
   const { data, error } = await supabase
     .from("cdf_negative")
     .select("driver_id")
-    .gte("delivery_date", start.toISOString())
-    .lt("delivery_date", endExclusive.toISOString());
+    .gte("delivery_date", range.startIso)
+    .lt("delivery_date", range.endExclusiveIso);
 
   if (error) {
     console.error("getNegativeCdfDriverCount failed:", error);
@@ -664,23 +698,33 @@ export const getNegativeCdfDriverCount = cache(async (): Promise<number> => {
   return ids.size;
 });
 
+/**
+ * DSB defect mix for the latest scorecard week, sourced from concessions
+ * filtered to `impacts_dsb = true`. Same window as the CDF donut so the
+ * Quality dashboard's per-week story is consistent. Same DSB report
+ * Amazon exposes separately — the data is already in our concessions
+ * table, no separate import needed.
+ */
 export const getDsbMix = cache(async (): Promise<DefectMix> => {
   const supabase = await createClient();
-  const now = new Date();
-  const todayUtc = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
-  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
-  const rangeStart = start.toISOString().slice(0, 10);
-  const rangeEnd = todayUtc.toISOString().slice(0, 10);
+  const range = await getLatestScorecardWeekRange();
+  if (!range) {
+    return {
+      rangeStart: "",
+      rangeEnd: "",
+      hasData: false,
+      byType: [],
+      total: 0,
+    };
+  }
+  const { rangeStart, rangeEnd, startIso, endExclusiveIso } = range;
 
   const { data, error } = await supabase
     .from("concessions")
     .select("defect_types, concession_date, impacts_dsb")
     .eq("impacts_dsb", true)
-    .gte("concession_date", start.toISOString())
-    .lt("concession_date", endExclusive.toISOString());
+    .gte("concession_date", startIso)
+    .lt("concession_date", endExclusiveIso);
 
   if (error) {
     console.error("getDsbMix failed:", error);
