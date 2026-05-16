@@ -18,7 +18,7 @@
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "lucide-react": "^1.14.0",
-    "next": "16.2.4",
+    "next": "^16.2.6",
     "next-themes": "^0.4.6",
     "papaparse": "^5.5.3",
     "pdfjs-dist": "^5.7.284",
@@ -42,5 +42,8 @@
     "supabase": "^2.98.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
   }
 }
