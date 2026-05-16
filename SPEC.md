@@ -239,9 +239,7 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY}` based on the current cal
 
 **Safety event mix:** Two donut charts side by side (Impacting / Non-impacting), each showing the per-event-type breakdown for the **rolling last 7 days** (today and the 6 calendar days before it, UTC). Designed for the daily Netradyne upload workflow — each CSV covers one day, and the donut reflects the trailing week regardless of whether every day was uploaded. Each donut has a legend list (type + count) sorted desc. Empty state shows a "no events in the last 7 days" panel that links to the Import page.
 
-**Hero list:** "Needs coaching this week" with Safety/Quality toggle (counts shown as pill chips), Show-N picker (15/30/50/All, default 15), whole section collapsible, inline `Log session` button per row that opens the same dialog used on the Coaching tab.
-
-**Right column:** Recent coaching — last 10 non-voided sessions across the DSP.
+**Hero list:** "Needs coaching this week" with Safety/Quality toggle (counts shown as pill chips), Show-N picker (15/30/50/All, default 15), whole section collapsible, inline `Log session` button per row that opens the same dialog used on the Coaching tab. Renders full-width below the leaderboards.
 
 ### 3. Drivers list (`/drivers`)
 Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.

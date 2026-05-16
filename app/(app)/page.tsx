@@ -10,7 +10,6 @@ import { amazonWeekFromEndingDate } from "@/lib/format/dates";
 import { StatTile } from "@/components/app/dashboard/stat-tile";
 import { SplitStatTile } from "@/components/app/dashboard/split-stat-tile";
 import { NeedsCoachingList } from "@/components/app/dashboard/needs-coaching-list";
-import { RecentActivity } from "@/components/app/dashboard/recent-activity";
 import { Leaderboards } from "@/components/app/dashboard/leaderboards";
 import { SafetyEventDonuts } from "@/components/app/dashboard/safety-donuts";
 import { PerformanceTrendChart } from "@/components/app/perf/trend-chart";
@@ -129,23 +128,11 @@ export default async function DashboardPage() {
       {/* Leaderboards: Top 5 / Most improved / Bottom 5 */}
       <Leaderboards {...leaderboards} />
 
-      {/* Two-column body: hero list + recent activity */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <NeedsCoachingList
-            safety={data.needsCoachingSafety}
-            quality={data.needsCoachingQuality}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <h2 className="text-base font-medium">Recent coaching</h2>
-            <p className="text-xs text-muted-foreground">last 10</p>
-          </div>
-          <RecentActivity sessions={data.recentSessions} />
-        </div>
-      </section>
+      {/* Needs coaching this week — full-width hero */}
+      <NeedsCoachingList
+        safety={data.needsCoachingSafety}
+        quality={data.needsCoachingQuality}
+      />
 
       {/* Safety event mix donuts */}
       <SafetyEventDonuts mix={safetyMix} />

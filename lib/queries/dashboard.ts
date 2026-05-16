@@ -617,40 +617,6 @@ export const getDashboardData = cache(async () => {
     (a, b) => b.total_events - a.total_events,
   );
 
-  // --- Recent coaching activity ---------------------------------------
-  const { data: recentSessionsRaw } = await supabase
-    .from("coaching_sessions")
-    .select(
-      `
-      id, driver_id, session_date, session_type, topic, acknowledged, created_at,
-      voided_at,
-      driver:drivers!coaching_sessions_driver_id_fkey ( id, full_name ),
-      coached_by:users!coaching_sessions_coached_by_fkey ( id, full_name, email )
-    `,
-    )
-    .order("created_at", { ascending: false })
-    .limit(15);
-
-  type Mini = { id: string; full_name: string | null; email?: string };
-  const flatten = <T,>(v: T | T[] | null | undefined): T | null => {
-    if (!v) return null;
-    return Array.isArray(v) ? (v[0] ?? null) : v;
-  };
-  const recentSessions = (recentSessionsRaw ?? [])
-    .filter((s) => !s.voided_at)
-    .slice(0, 10)
-    .map((s) => ({
-      id: s.id as string,
-      driver_id: s.driver_id as string,
-      session_date: s.session_date as string,
-      session_type: s.session_type as string,
-      topic: s.topic as string,
-      acknowledged: s.acknowledged as boolean,
-      created_at: s.created_at as string,
-      driver: flatten(s.driver as unknown as Mini | Mini[]),
-      coached_by: flatten(s.coached_by as unknown as Mini | Mini[]),
-    }));
-
   return {
     window: win,
     stats: {
@@ -664,7 +630,6 @@ export const getDashboardData = cache(async () => {
     },
     needsCoachingSafety,
     needsCoachingQuality,
-    recentSessions,
   };
 });
 
