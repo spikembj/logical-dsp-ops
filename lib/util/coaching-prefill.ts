@@ -1,19 +1,31 @@
 import type { CoachingSessionType } from "@/lib/types/database";
 
 /**
+ * Category of trigger this coaching session addresses. Tracked on the
+ * coaching_sessions row so triggers can be cleared per-category — a
+ * safety coaching clears only the safety trigger, not the quality one.
+ *
+ * "other" is the catch-all for write-ups, follow-ups, and anything not
+ * tied to a specific Safety / Quality / Escalation trigger. Other-
+ * category sessions don't clear any trigger from the needs lists.
+ */
+export type CoachingCategory = "safety" | "quality" | "escalation" | "other";
+
+/**
  * Pre-fill bundle for the Log Session dialog when opened from a specific
  * trigger context (e.g. the Performance dashboard's needs-coaching hero
  * list, or a category in the per-driver triggers panel).
  *
  * The standalone "Log new session" button on the Coaching tab does NOT
- * pass a prefill — it opens blank so the user can record write-ups,
- * out-of-band conversations, etc. without the form pre-shaping the
- * narrative.
+ * pass a prefill — it opens blank (category = 'other') so the user can
+ * record write-ups, out-of-band conversations, etc. without the form
+ * pre-shaping the narrative.
  */
 export interface CoachingPrefill {
   session_type: CoachingSessionType;
   topic: string;
   notes: string;
+  category: CoachingCategory;
 }
 
 /** Format the trailing window phrase consistently across all flavors. */
@@ -37,6 +49,7 @@ export function safetyPrefill(args: {
     session_type: "discussion",
     topic: "Safety training",
     notes: `${args.total_events} impacting safety ${noun} ${windowPhrase(days)}.${typesPart}`,
+    category: "safety",
   };
 }
 
@@ -50,6 +63,7 @@ export function qualityPrefill(args: {
     session_type: "discussion",
     topic: "Quality training",
     notes: `Quality triggers from latest scorecard:\n${bullets}`,
+    category: "quality",
   };
 }
 
@@ -64,5 +78,6 @@ export function escalationPrefill(args: {
     session_type: "discussion",
     topic: "Escalation review",
     notes: `Open Amazon escalations to discuss:\n${bullets}`,
+    category: "escalation",
   };
 }

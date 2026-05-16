@@ -25,7 +25,10 @@ import {
 import { todayIso } from "@/lib/format/dates";
 import { cn } from "@/lib/utils";
 import type { CoachingSessionType } from "@/lib/types/database";
-import type { CoachingPrefill } from "@/lib/util/coaching-prefill";
+import type {
+  CoachingCategory,
+  CoachingPrefill,
+} from "@/lib/util/coaching-prefill";
 
 const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
   { value: "discussion", label: "Discussion" },
@@ -33,6 +36,13 @@ const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
   { value: "write_up", label: "Write up" },
   { value: "final_warning", label: "Final warning" },
   { value: "termination", label: "Termination" },
+];
+
+const CATEGORIES: { value: CoachingCategory; label: string }[] = [
+  { value: "safety", label: "Safety" },
+  { value: "quality", label: "Quality" },
+  { value: "escalation", label: "Escalation" },
+  { value: "other", label: "Other" },
 ];
 
 type CreateProps = {
@@ -69,6 +79,7 @@ type EditProps = {
     topic: string;
     notes: string | null;
     acknowledged: boolean;
+    category: CoachingCategory;
   };
 };
 
@@ -90,6 +101,7 @@ export function LogSessionDialog(props: Props) {
         topic: props.session.topic,
         notes: props.session.notes ?? "",
         acknowledged: props.session.acknowledged,
+        category: props.session.category,
       }
     : {
         sessionDate: todayIso(),
@@ -98,6 +110,7 @@ export function LogSessionDialog(props: Props) {
         topic: prefill?.topic ?? "",
         notes: prefill?.notes ?? "",
         acknowledged: false,
+        category: prefill?.category ?? ("other" as CoachingCategory),
       };
 
   const [sessionDate, setSessionDate] = useState(initial.sessionDate);
@@ -107,6 +120,7 @@ export function LogSessionDialog(props: Props) {
   const [topic, setTopic] = useState(initial.topic);
   const [notes, setNotes] = useState(initial.notes);
   const [acknowledged, setAcknowledged] = useState(initial.acknowledged);
+  const [category, setCategory] = useState<CoachingCategory>(initial.category);
 
   function reset() {
     setSessionDate(initial.sessionDate);
@@ -114,6 +128,7 @@ export function LogSessionDialog(props: Props) {
     setTopic(initial.topic);
     setNotes(initial.notes);
     setAcknowledged(initial.acknowledged);
+    setCategory(initial.category);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -132,6 +147,7 @@ export function LogSessionDialog(props: Props) {
             session_type: sessionType,
             topic: topic.trim(),
             notes: notes.trim() || null,
+            category,
           })
         : await createCoachingSession({
             driver_id: props.driverId,
@@ -140,6 +156,7 @@ export function LogSessionDialog(props: Props) {
             topic: topic.trim(),
             notes: notes.trim() || null,
             acknowledged,
+            category,
           });
 
       if (!res.ok) {
@@ -230,6 +247,29 @@ export function LogSessionDialog(props: Props) {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">Category</Label>
+            <select
+              id="category"
+              value={category}
+              onChange={(e) =>
+                setCategory(e.currentTarget.value as CoachingCategory)
+              }
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              Determines which trigger clears from the driver&rsquo;s
+              needs-coaching list. &ldquo;Other&rdquo; doesn&rsquo;t clear
+              anything.
+            </p>
           </div>
 
           <div className="space-y-2">

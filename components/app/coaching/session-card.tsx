@@ -227,6 +227,7 @@ export function SessionCard({ session, driverName, isAdmin }: Props) {
                 topic: session.topic,
                 notes: session.notes,
                 acknowledged: session.acknowledged,
+                category: session.category,
               }}
             />
           )}

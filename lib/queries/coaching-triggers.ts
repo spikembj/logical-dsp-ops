@@ -44,10 +44,25 @@ export interface EscalationTrigger {
 }
 
 export interface DriverCoachingTriggers {
+  /** Empty when a category='safety' session exists in the window — the
+   * driver was already coached for safety, so the safety list is "cleared".
+   * Same logic for quality + escalations. The raw triggers (regardless of
+   * clearance) are still on file in the underlying tables — this query
+   * just decides what's surfaced as actionable. */
   safety: SafetyTrigger[];
   quality: QualityTrigger[];
   escalations: EscalationTrigger[];
+  /** True if ANY non-voided session (any category) exists in the window.
+   * Used for the "coached this week" empty-state copy. */
   hasSessionInWindow: boolean;
+  /** Per-category breakdown of which trigger families were addressed in
+   * the window. Useful for UI that wants to show "✓ coached for X" instead
+   * of just hiding the list. */
+  coachedCategories: {
+    safety: boolean;
+    quality: boolean;
+    escalation: boolean;
+  };
   windowDays: number;
 }
 
@@ -118,7 +133,7 @@ export const getDriverCoachingTriggers = cache(
     const cutoffIso = new Date(cutoffMs).toISOString();
     const cutoffDate = cutoffIso.slice(0, 10);
 
-    const [eventsRes, latestRes, sessionRes, escRes] = await Promise.all([
+    const [eventsRes, latestRes, sessionsRes, escRes] = await Promise.all([
       supabase
         .from("safety_events")
         .select("event_type, count")
@@ -132,9 +147,11 @@ export const getDriverCoachingTriggers = cache(
         .order("week_ending", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      // Pull each non-voided session in the window along with its category
+      // so we can suppress matching trigger lists per-category.
       supabase
         .from("coaching_sessions")
-        .select("id", { head: true, count: "exact" })
+        .select("category")
         .eq("driver_id", driverId)
         .gte("session_date", cutoffDate)
         .is("voided_at", null),
@@ -147,6 +164,15 @@ export const getDriverCoachingTriggers = cache(
         .order("incident_date", { ascending: false }),
     ]);
 
+    const coachedCategories = { safety: false, quality: false, escalation: false };
+    for (const s of sessionsRes.data ?? []) {
+      const c = (s.category as string | null) ?? "other";
+      if (c === "safety") coachedCategories.safety = true;
+      else if (c === "quality") coachedCategories.quality = true;
+      else if (c === "escalation") coachedCategories.escalation = true;
+    }
+    const hasSessionInWindow = (sessionsRes.data?.length ?? 0) > 0;
+
     const byType = new Map<string, SafetyTrigger>();
     for (const e of eventsRes.data ?? []) {
       const key = e.event_type as string;
@@ -155,26 +181,42 @@ export const getDriverCoachingTriggers = cache(
       byType.get(key)!.total_count += (e.count as number) ?? 0;
     }
 
-    const safety = [...byType.values()].sort(
-      (a, b) => b.total_count - a.total_count,
-    );
-    const quality = latestRes.data
-      ? evaluateScorecard(latestRes.data as ScorecardLite)
-      : [];
-    const escalations: EscalationTrigger[] = (escRes.data ?? [])
-      .filter(
-        (e) => ((e.ack_status as string | null) ?? "").trim().toLowerCase() !== "yes",
-      )
-      .map((e) => ({
-        id: e.id as string,
-        bucket: (e.bucket as string | null) ?? null,
-        category: (e.category as string | null) ?? null,
-        behavior: e.behavior as string,
-        incident_date: e.incident_date as string,
-        ack_status: (e.ack_status as string | null) ?? null,
-      }));
-    const hasSessionInWindow = (sessionRes.count ?? 0) > 0;
+    // Each trigger list is cleared if a category-specific session exists.
+    // Resurfaces naturally next week (window advances past the session).
+    const safety = coachedCategories.safety
+      ? []
+      : [...byType.values()].sort(
+          (a, b) => b.total_count - a.total_count,
+        );
+    const quality = coachedCategories.quality
+      ? []
+      : latestRes.data
+        ? evaluateScorecard(latestRes.data as ScorecardLite)
+        : [];
+    const escalations: EscalationTrigger[] = coachedCategories.escalation
+      ? []
+      : (escRes.data ?? [])
+          .filter(
+            (e) =>
+              ((e.ack_status as string | null) ?? "").trim().toLowerCase() !==
+              "yes",
+          )
+          .map((e) => ({
+            id: e.id as string,
+            bucket: (e.bucket as string | null) ?? null,
+            category: (e.category as string | null) ?? null,
+            behavior: e.behavior as string,
+            incident_date: e.incident_date as string,
+            ack_status: (e.ack_status as string | null) ?? null,
+          }));
 
-    return { safety, quality, escalations, hasSessionInWindow, windowDays };
+    return {
+      safety,
+      quality,
+      escalations,
+      hasSessionInWindow,
+      coachedCategories,
+      windowDays,
+    };
   },
 );

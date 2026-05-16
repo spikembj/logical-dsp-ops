@@ -141,6 +141,7 @@ Unique on (`driver_id`, `incident_date`, `behavior`, `bucket`); re-imports upser
 - `id`, `driver_id`, `coached_by`
 - `session_date` (date)
 - **`session_type`** (enum: **discussion / verbal_warning / write_up / final_warning / termination**, default `discussion`)
+- **`category`** (text, default `'other'`, CHECK in `safety` / `quality` / `escalation` / `other`) — controls which trigger clears from the needs-coaching lists when this session lands. `'other'` (default) clears nothing — for write-ups and untriggered sessions. Trigger-button click paths set it automatically (safety / quality / escalation); the dialog has a dropdown for manual selection too.
 - `topic`, `notes`
 - `acknowledged` (bool), `acknowledged_at` (timestamptz, nullable)
 - `linked_scorecard_id`, `linked_event_ids` (uuid[])
@@ -235,7 +236,7 @@ Header: `Hi {firstName} — Week {N}, {Month Do, YYYY} · {N} active drivers`. I
 
 #### Quality view stat tiles (4)
 - **Avg overall score** — average across all drivers in the latest scorecard week.
-- **Avg DCR** — same averaging.
+- **Drivers with negative CDF** — distinct drivers with one or more `cdf_negative` rows in the rolling last 7 days. Useful for sizing the "how many people gave us customer complaints this week" problem.
 - **Coaching sessions** — logged this week.
 - **Below threshold** — drivers breaking any quality threshold (DCR / POD / CDF DPMO / CED / DSB DPMO / DSB Count / PSB) on the latest scorecard. Clickable dialog with the list.
 
@@ -280,7 +281,9 @@ Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **
 ### 5. Log coaching session (modal)
 Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning / Termination), topic, notes, acknowledged toggle. Save creates immutable session record. Edit mode uses same dialog (management only).
 
-**Trigger-context pre-fill:** when the dialog is opened from a needs-coaching row (Performance dashboard hero list) or a category card on the per-driver Triggers panel, fields pre-populate with the category's context — session type defaults to Discussion, topic to "Safety training" / "Quality training" / "Escalation review", and notes to a templated summary of the specific triggers ("3 impacting safety events in last 7 days: Speeding Violations, Driver Distraction", or the latest scorecard's threshold breaches as a bulleted list). Every field stays editable before saving. The standalone "Log new session" button at the top of the Coaching tab intentionally opens **blank** so write-ups and out-of-band sessions aren't shaped by the templates.
+**Trigger-context pre-fill:** when the dialog is opened from a needs-coaching row (Performance dashboard hero list) or a category card on the per-driver Triggers panel, fields pre-populate with the category's context — session type defaults to Discussion, topic to "Safety training" / "Quality training" / "Escalation review", `category` to the matching value (so the corresponding trigger clears on save), and notes to a templated summary of the specific triggers ("3 impacting safety events in last 7 days: Speeding Violations, Driver Distraction", or the latest scorecard's threshold breaches as a bulleted list). Every field — including category — stays editable before saving. The standalone "Log new session" button at the top of the Coaching tab intentionally opens **blank** with `category = 'other'` so write-ups and out-of-band sessions aren't shaped by templates and don't accidentally clear unrelated triggers.
+
+**Per-category clearing:** the dashboard needs-coaching lists and the per-driver Triggers panel both filter their content by category. Saving a Safety-category session clears the safety trigger for that driver in the 7-day window but leaves any quality trigger intact (and vice versa). `'other'` sessions don't clear anything. Triggers naturally re-surface when the window advances past the session, or when fresh data arrives (new safety events, new scorecard).
 
 ### 6. Import (`/import`)
 Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.

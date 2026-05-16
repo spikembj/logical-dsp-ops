@@ -636,6 +636,34 @@ export const getCdfNegativeMix = cache(async (): Promise<DefectMix> => {
  * Same DSB report Amazon exposes separately — the data is already in
  * our concessions table.
  */
+/**
+ * Distinct count of drivers with one or more cdf_negative rows in the
+ * rolling last 7 days. Drives the Quality tile #2.
+ */
+export const getNegativeCdfDriverCount = cache(async (): Promise<number> => {
+  const supabase = await createClient();
+  const now = new Date();
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const start = new Date(todayUtc.getTime() - 6 * 86_400_000);
+  const endExclusive = new Date(todayUtc.getTime() + 86_400_000);
+
+  const { data, error } = await supabase
+    .from("cdf_negative")
+    .select("driver_id")
+    .gte("delivery_date", start.toISOString())
+    .lt("delivery_date", endExclusive.toISOString());
+
+  if (error) {
+    console.error("getNegativeCdfDriverCount failed:", error);
+    return 0;
+  }
+  const ids = new Set<string>();
+  for (const r of data ?? []) ids.add(r.driver_id as string);
+  return ids.size;
+});
+
 export const getDsbMix = cache(async (): Promise<DefectMix> => {
   const supabase = await createClient();
   const now = new Date();
@@ -974,7 +1002,7 @@ export const getDashboardData = cache(async () => {
       .lt("event_date", win.endTs),
     supabase
       .from("coaching_sessions")
-      .select("id, driver_id", { count: "exact" })
+      .select("id, driver_id, category", { count: "exact" })
       .gte("session_date", win.start)
       .lte("session_date", win.asOf)
       .is("voided_at", null),
@@ -1011,7 +1039,20 @@ export const getDashboardData = cache(async () => {
     0,
   );
   const sessionRows = sessionsRes.data ?? [];
-  const coachedDriverIds = new Set(sessionRows.map((s) => s.driver_id));
+  // Per-category coached sets: a driver only drops from a category's
+  // needs list when there's a category-matching session in the window.
+  // 'other' sessions don't clear anything. Pre-Pass-13 sessions all have
+  // category='other' by default, so they show up here but don't suppress.
+  const coachedSafetyIds = new Set<string>();
+  const coachedQualityIds = new Set<string>();
+  const coachedEscalationIds = new Set<string>();
+  for (const s of sessionRows) {
+    const id = s.driver_id as string;
+    const cat = ((s as { category?: string }).category as string) ?? "other";
+    if (cat === "safety") coachedSafetyIds.add(id);
+    else if (cat === "quality") coachedQualityIds.add(id);
+    else if (cat === "escalation") coachedEscalationIds.add(id);
+  }
 
   // --- Needs coaching: SAFETY ------------------------------------------
   type NeedsRow = {
@@ -1024,7 +1065,7 @@ export const getDashboardData = cache(async () => {
   };
   const safetyByDriver = new Map<string, NeedsRow>();
   for (const e of impactingEventRows) {
-    if (coachedDriverIds.has(e.driver_id)) continue;
+    if (coachedSafetyIds.has(e.driver_id)) continue;
     if (!safetyByDriver.has(e.driver_id)) {
       safetyByDriver.set(e.driver_id, {
         driver_id: e.driver_id,
@@ -1058,7 +1099,7 @@ export const getDashboardData = cache(async () => {
       .select("driver_id, dcr, pod, cdf, ced, dsb, dsb_count, psb")
       .eq("week_ending", latestWeek);
     for (const sc of latestCards ?? []) {
-      if (coachedDriverIds.has(sc.driver_id)) continue;
+      if (coachedQualityIds.has(sc.driver_id)) continue;
       const issues = evaluateScorecard(sc);
       if (issues.length === 0) continue;
       qualityByDriver.set(sc.driver_id, {
@@ -1079,7 +1120,7 @@ export const getDashboardData = cache(async () => {
   for (const e of openEscalations ?? []) {
     const ack = ((e.ack_status as string | null) ?? "").trim().toLowerCase();
     if (ack === "yes") continue;
-    if (coachedDriverIds.has(e.driver_id as string)) continue;
+    if (coachedEscalationIds.has(e.driver_id as string)) continue;
     const did = e.driver_id as string;
     if (!qualityByDriver.has(did)) {
       qualityByDriver.set(did, {

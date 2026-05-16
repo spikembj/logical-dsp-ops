@@ -11,6 +11,7 @@ import {
   getQualityThresholdDrivers,
   getCdfNegativeMix,
   getDsbMix,
+  getNegativeCdfDriverCount,
   SAFETY_IMPACTING_THRESHOLD,
   SAFETY_NON_IMPACTING_THRESHOLD,
 } from "@/lib/queries/dashboard";
@@ -72,6 +73,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     qualityThresholdDrivers,
     cdfMix,
     dsbMix,
+    negativeCdfDriverCount,
   ] = await Promise.all([
     getDashboardData(),
     getCompanyTrend(),
@@ -84,6 +86,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     getQualityThresholdDrivers(),
     getCdfNegativeMix(),
     getDsbMix(),
+    getNegativeCdfDriverCount(),
   ]);
   const today = new Date();
   const { week } = currentAmazonWeek(today);
@@ -142,6 +145,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           needsQuality={data.needsCoachingQuality}
           cdfMix={cdfMix}
           dsbMix={dsbMix}
+          negativeCdfDriverCount={negativeCdfDriverCount}
         />
       )}
 
@@ -250,6 +254,7 @@ function QualityView({
   needsQuality,
   cdfMix,
   dsbMix,
+  negativeCdfDriverCount,
 }: {
   companyTrend: Awaited<ReturnType<typeof getCompanyTrend>>;
   sessionCount: number;
@@ -262,11 +267,11 @@ function QualityView({
   needsQuality: Awaited<ReturnType<typeof getDashboardData>>["needsCoachingQuality"];
   cdfMix: Awaited<ReturnType<typeof getCdfNegativeMix>>;
   dsbMix: Awaited<ReturnType<typeof getDsbMix>>;
+  negativeCdfDriverCount: number;
 }) {
-  // Avg overall + avg DCR from the most recent week in companyTrend, if any.
+  // Avg overall from the most recent week in companyTrend, if any.
   const latest = companyTrend[companyTrend.length - 1];
   const avgOverall = latest?.overall_score;
-  const avgDcr = latest?.dcr;
 
   return (
     <>
@@ -278,9 +283,10 @@ function QualityView({
           hint={latest ? "latest week, all drivers" : "no scorecards yet"}
         />
         <StatTile
-          label="Avg DCR"
-          value={avgDcr !== null && avgDcr !== undefined ? `${avgDcr.toFixed(1)}%` : "—"}
-          hint={latest ? "latest week, all drivers" : "no scorecards yet"}
+          label="Drivers with negative CDF"
+          value={negativeCdfDriverCount}
+          hint="rolling last 7 days"
+          accent={negativeCdfDriverCount > 0 ? "warn" : "good"}
         />
         <StatTile
           label="Coaching sessions"

@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { CoachingSessionType } from "@/lib/types/database";
+import type { CoachingCategory } from "@/lib/util/coaching-prefill";
 
 interface UserMini {
   id: string;
@@ -41,6 +42,7 @@ export interface CoachingSessionListItem {
   driver_id: string;
   session_date: string; // ISO date (YYYY-MM-DD)
   session_type: CoachingSessionType;
+  category: CoachingCategory;
   topic: string;
   notes: string | null;
   acknowledged: boolean;
@@ -70,7 +72,7 @@ export const listSessionsForDriver = cache(
       .from("coaching_sessions")
       .select(
         `
-        id, driver_id, session_date, session_type, topic, notes,
+        id, driver_id, session_date, session_type, category, topic, notes,
         acknowledged, acknowledged_at,
         linked_scorecard_id, linked_event_ids,
         voided_at, void_reason,

@@ -29,6 +29,8 @@ const SessionType = z.enum([
   "termination",
 ]);
 
+const Category = z.enum(["safety", "quality", "escalation", "other"]);
+
 const CreateSchema = z.object({
   driver_id: z.string().uuid(),
   session_date: Iso,
@@ -36,6 +38,7 @@ const CreateSchema = z.object({
   topic: z.string().trim().min(1, "Topic is required").max(200),
   notes: z.string().trim().max(10_000).optional().nullable(),
   acknowledged: z.boolean().default(false),
+  category: Category.default("other"),
 });
 
 const UpdateSchema = z.object({
@@ -45,6 +48,7 @@ const UpdateSchema = z.object({
   session_type: SessionType,
   topic: z.string().trim().min(1, "Topic is required").max(200),
   notes: z.string().trim().max(10_000).optional().nullable(),
+  category: Category,
 });
 
 const VoidSchema = z.object({
@@ -83,8 +87,15 @@ export async function createCoachingSession(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const { driver_id, session_date, session_type, topic, notes, acknowledged } =
-    parsed.data;
+  const {
+    driver_id,
+    session_date,
+    session_type,
+    topic,
+    notes,
+    acknowledged,
+    category,
+  } = parsed.data;
 
   const { error } = await supabase.from("coaching_sessions").insert({
     driver_id,
@@ -95,6 +106,7 @@ export async function createCoachingSession(
     notes: notes || null,
     acknowledged,
     acknowledged_at: acknowledged ? new Date().toISOString() : null,
+    category,
   });
 
   if (error) {
@@ -117,13 +129,20 @@ export async function updateCoachingSession(
   if (!parsed.success) return fail(parsed.error.issues);
 
   const supabase = await createClient();
-  const { session_id, driver_id, session_date, session_type, topic, notes } =
-    parsed.data;
+  const {
+    session_id,
+    driver_id,
+    session_date,
+    session_type,
+    topic,
+    notes,
+    category,
+  } = parsed.data;
 
   const { error, count } = await supabase
     .from("coaching_sessions")
     .update(
-      { session_date, session_type, topic, notes: notes || null },
+      { session_date, session_type, topic, notes: notes || null, category },
       { count: "exact" },
     )
     .eq("id", session_id)
