@@ -80,7 +80,7 @@ export function SafetyEventList({ events }: { events: SafetyEventRow[] }) {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>Date / period end</TableHead>
+                <TableHead>Date</TableHead>
                 <TableHead>Event type</TableHead>
                 <TableHead>Severity</TableHead>
                 <TableHead className="text-right">Count</TableHead>

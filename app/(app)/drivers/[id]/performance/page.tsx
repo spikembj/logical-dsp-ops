@@ -49,14 +49,28 @@ export default async function DriverPerformancePage({ params }: Props) {
   const concTypeBreakdown = [...concTypeCounts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count);
-  const cdfTypeCounts = new Map<string, number>();
+  // CDF: group each TBA under every type it was flagged for. A TBA with
+  // multiple feedback types appears under each — accurate, not double-
+  // counting. Each group sorted by date desc (most recent first); types
+  // sorted by group size desc (worst category at the top).
+  type CdfItem = { id: string; tracking_id: string; date: string };
+  const cdfByType = new Map<string, CdfItem[]>();
   for (const c of cdfRows) {
-    for (const t of c.feedback_types ?? [])
-      cdfTypeCounts.set(t, (cdfTypeCounts.get(t) ?? 0) + 1);
+    for (const t of c.feedback_types ?? []) {
+      if (!cdfByType.has(t)) cdfByType.set(t, []);
+      cdfByType.get(t)!.push({
+        id: c.id,
+        tracking_id: c.tracking_id,
+        date: c.date,
+      });
+    }
   }
-  const cdfTypeBreakdown = [...cdfTypeCounts.entries()]
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count);
+  const cdfGroups = [...cdfByType.entries()]
+    .map(([type, items]) => ({
+      type,
+      items: items.sort((a, b) => (a.date < b.date ? 1 : -1)),
+    }))
+    .sort((a, b) => b.items.length - a.items.length);
 
   if (scorecards.length === 0) {
     return (
@@ -299,7 +313,7 @@ export default async function DriverPerformancePage({ params }: Props) {
       )}
 
       {cdfRows.length > 0 && (
-        <section className="rounded-xl border bg-card p-4 space-y-3 md:col-span-2">
+        <section className="rounded-xl border bg-card p-4 space-y-4 md:col-span-2">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-medium">
               Negative Customer Delivery Feedback
@@ -308,35 +322,34 @@ export default async function DriverPerformancePage({ params }: Props) {
               {cdfRows.length} {cdfRows.length === 1 ? "row" : "rows"} on file
             </span>
           </div>
-          {cdfTypeBreakdown.length > 0 && (
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm border-t pt-2">
-              {cdfTypeBreakdown.map((c) => (
-                <li
-                  key={c.label}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <span className="text-foreground/80">{c.label}</span>
-                  <span className="tabular-nums">{c.count}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <ul className="border-t pt-2 text-sm divide-y">
-            {cdfRows.map((c) => (
-              <li
-                key={c.id}
-                className="flex items-baseline justify-between gap-3 py-1.5"
-              >
-                <code className="font-mono text-xs">{c.tracking_id}</code>
-                <time
-                  dateTime={c.date}
-                  className="text-xs text-muted-foreground tabular-nums"
-                >
-                  {formatSessionDate(c.date.slice(0, 10))}
-                </time>
-              </li>
+          <div className="space-y-4 border-t pt-3">
+            {cdfGroups.map((g) => (
+              <div key={g.type} className="space-y-1">
+                <h4 className="text-sm font-medium flex items-baseline gap-2">
+                  <span>{g.type}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    ({g.items.length})
+                  </span>
+                </h4>
+                <ul className="text-xs divide-y">
+                  {g.items.map((item) => (
+                    <li
+                      key={`${g.type}-${item.id}`}
+                      className="flex items-baseline justify-between gap-3 py-1 pl-3"
+                    >
+                      <code className="font-mono">{item.tracking_id}</code>
+                      <time
+                        dateTime={item.date}
+                        className="text-muted-foreground tabular-nums"
+                      >
+                        {formatSessionDate(item.date.slice(0, 10))}
+                      </time>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </section>
       )}
       </div>
