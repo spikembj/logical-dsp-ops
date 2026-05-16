@@ -620,6 +620,9 @@ function weekRangeContaining(yyyymmdd: string): ScorecardWeekRange {
 const getLatestScorecardWeekRange = cache(
   async (): Promise<ScorecardWeekRange | null> => {
     const supabase = await createClient();
+    // For concessions we look at delivery_date (when the package shipped),
+    // not concession_date (when Amazon filed the concession) — the donut
+    // is about "defects on packages delivered this week" for coaching.
     const [scWk, cdfMax, concMax] = await Promise.all([
       supabase
         .from("scorecards")
@@ -633,8 +636,9 @@ const getLatestScorecardWeekRange = cache(
         .limit(1),
       supabase
         .from("concessions")
-        .select("concession_date")
-        .order("concession_date", { ascending: false })
+        .select("delivery_date")
+        .not("delivery_date", "is", null)
+        .order("delivery_date", { ascending: false })
         .limit(1),
     ]);
 
@@ -643,7 +647,7 @@ const getLatestScorecardWeekRange = cache(
     if (scEnd) candidates.push(scEnd);
     const cdfRaw = cdfMax.data?.[0]?.delivery_date as string | undefined;
     if (cdfRaw) candidates.push(cdfRaw.slice(0, 10));
-    const concRaw = concMax.data?.[0]?.concession_date as string | undefined;
+    const concRaw = concMax.data?.[0]?.delivery_date as string | undefined;
     if (concRaw) candidates.push(concRaw.slice(0, 10));
 
     if (candidates.length === 0) return null;
@@ -758,12 +762,15 @@ export const getDsbMix = cache(async (): Promise<DefectMix> => {
   }
   const { rangeStart, rangeEnd, startIso, endExclusiveIso } = range;
 
+  // Filter by delivery_date (when the package shipped) — that's the
+  // operational week we care about for coaching, even though Amazon's
+  // concession_date (when they filed) may be days/weeks later.
   const { data, error } = await supabase
     .from("concessions")
-    .select("defect_types, concession_date, impacts_dsb")
+    .select("defect_types, delivery_date, impacts_dsb")
     .eq("impacts_dsb", true)
-    .gte("concession_date", startIso)
-    .lt("concession_date", endExclusiveIso);
+    .gte("delivery_date", startIso)
+    .lt("delivery_date", endExclusiveIso);
 
   if (error) {
     console.error("getDsbMix failed:", error);
