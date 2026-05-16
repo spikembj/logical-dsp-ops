@@ -622,11 +622,11 @@ function weekRangeContaining(yyyymmdd: string): ScorecardWeekRange {
 const getLatestScorecardWeekRange = cache(
   async (): Promise<ScorecardWeekRange | null> => {
     const supabase = await createClient();
-    // For concessions we look at delivery_date (when the package shipped),
-    // not concession_date (when Amazon filed the concession) — the donut
-    // is about "defects on packages delivered this week" for coaching.
-    // Restrict to impacts_dsb rows so the anchor matches the DSB donut's
-    // filter exactly.
+    // CDF uses delivery_date (when the package shipped). DSB uses
+    // concession_date (when Amazon filed the concession) — that's the
+    // date Amazon's weekly scorecard counts the DSB against, so this
+    // matches the financial / accounting reality the user cares about
+    // even though it's a different field than CDF.
     const [cdfMax, concMax] = await Promise.all([
       supabase
         .from("cdf_negative")
@@ -635,17 +635,16 @@ const getLatestScorecardWeekRange = cache(
         .limit(1),
       supabase
         .from("concessions")
-        .select("delivery_date")
+        .select("concession_date")
         .eq("impacts_dsb", true)
-        .not("delivery_date", "is", null)
-        .order("delivery_date", { ascending: false })
+        .order("concession_date", { ascending: false })
         .limit(1),
     ]);
 
     const candidates: string[] = [];
     const cdfRaw = cdfMax.data?.[0]?.delivery_date as string | undefined;
     if (cdfRaw) candidates.push(cdfRaw.slice(0, 10));
-    const concRaw = concMax.data?.[0]?.delivery_date as string | undefined;
+    const concRaw = concMax.data?.[0]?.concession_date as string | undefined;
     if (concRaw) candidates.push(concRaw.slice(0, 10));
 
     if (candidates.length === 0) return null;
@@ -760,15 +759,16 @@ export const getDsbMix = cache(async (): Promise<DefectMix> => {
   }
   const { rangeStart, rangeEnd, startIso, endExclusiveIso } = range;
 
-  // Filter by delivery_date (when the package shipped) — that's the
-  // operational week we care about for coaching, even though Amazon's
-  // concession_date (when they filed) may be days/weeks later.
+  // Filter by concession_date (when Amazon filed the concession) — that's
+  // the date the DSB hits Amazon's weekly scorecard, so this is what
+  // operationally matters for "how DSBs impact us this week." Different
+  // semantic than CDF (which uses delivery_date) by design.
   const { data, error } = await supabase
     .from("concessions")
-    .select("defect_types, delivery_date, impacts_dsb")
+    .select("defect_types, concession_date, impacts_dsb")
     .eq("impacts_dsb", true)
-    .gte("delivery_date", startIso)
-    .lt("delivery_date", endExclusiveIso);
+    .gte("concession_date", startIso)
+    .lt("concession_date", endExclusiveIso);
 
   if (error) {
     console.error("getDsbMix failed:", error);
