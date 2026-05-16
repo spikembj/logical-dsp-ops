@@ -56,6 +56,7 @@ export type Severity = "impacting" | "non_impacting";
 export type ImportType = "scorecard" | "netradyne";
 export type CoachingSessionType =
   | "discussion"
+  | "training"
   | "verbal_warning"
   | "write_up"
   | "final_warning"

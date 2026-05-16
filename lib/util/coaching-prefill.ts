@@ -46,7 +46,7 @@ export function safetyPrefill(args: {
       ? ` Event types: ${args.event_types.join(", ")}.`
       : "";
   return {
-    session_type: "discussion",
+    session_type: "training",
     topic: "Safety training",
     notes: `${args.total_events} impacting safety ${noun} ${windowPhrase(days)}.${typesPart}`,
     category: "safety",
@@ -60,7 +60,7 @@ export function qualityPrefill(args: {
 }): CoachingPrefill {
   const bullets = args.issues.map((i) => `• ${i}`).join("\n");
   return {
-    session_type: "discussion",
+    session_type: "training",
     topic: "Quality training",
     notes: `Quality triggers from latest scorecard:\n${bullets}`,
     category: "quality",
@@ -75,7 +75,7 @@ export function escalationPrefill(args: {
     .map((b) => `• ${b.behavior} (${b.incident_date})`)
     .join("\n");
   return {
-    session_type: "discussion",
+    session_type: "training",
     topic: "Escalation review",
     notes: `Open Amazon escalations to discuss:\n${bullets}`,
     category: "escalation",

@@ -32,17 +32,11 @@ import type {
 
 const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
   { value: "discussion", label: "Discussion" },
+  { value: "training", label: "Training" },
   { value: "verbal_warning", label: "Verbal warning" },
   { value: "write_up", label: "Write up" },
   { value: "final_warning", label: "Final warning" },
   { value: "termination", label: "Termination" },
-];
-
-const CATEGORIES: { value: CoachingCategory; label: string }[] = [
-  { value: "safety", label: "Safety" },
-  { value: "quality", label: "Quality" },
-  { value: "escalation", label: "Escalation" },
-  { value: "other", label: "Other" },
 ];
 
 type CreateProps = {
@@ -247,29 +241,6 @@ export function LogSessionDialog(props: Props) {
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
-            <select
-              id="category"
-              value={category}
-              onChange={(e) =>
-                setCategory(e.currentTarget.value as CoachingCategory)
-              }
-              className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-muted-foreground">
-              Determines which trigger clears from the driver&rsquo;s
-              needs-coaching list. &ldquo;Other&rdquo; doesn&rsquo;t clear
-              anything.
-            </p>
           </div>
 
           <div className="space-y-2">

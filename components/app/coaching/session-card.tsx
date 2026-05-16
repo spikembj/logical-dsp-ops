@@ -18,6 +18,7 @@ import type { CoachingSessionType } from "@/lib/types/database";
 
 const TYPE_LABEL: Record<CoachingSessionType, string> = {
   discussion: "Discussion",
+  training: "Training",
   verbal_warning: "Verbal warning",
   write_up: "Write up",
   final_warning: "Final warning",
@@ -26,6 +27,8 @@ const TYPE_LABEL: Record<CoachingSessionType, string> = {
 
 const TYPE_CLASS: Record<CoachingSessionType, string> = {
   discussion: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-400",
+  training:
+    "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-400",
   verbal_warning:
     "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-400",
   write_up:
