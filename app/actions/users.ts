@@ -206,16 +206,18 @@ export async function sendPasswordReset(
   if (!parsed.success)
     return { ok: false, error: parsed.error.issues[0]!.message };
 
-  const admin = createServiceRoleClient();
+  // Use the regular auth client's `resetPasswordForEmail` — it reliably
+  // triggers the recovery email via the project's SMTP. The admin
+  // `generateLink('recovery', …)` API returns a link but only emails in
+  // some configurations, which silently failed in production.
+  // Permission to actually trigger the reset is gated by the
+  // requireManagement() check above, not by the underlying API.
+  const supabase = await createClient();
   const redirectTo = await setPasswordRedirect();
-  // generateLink('recovery', ...) returns the action_link AND triggers
-  // the recovery email via the project's SMTP settings — same email the
-  // user would get from `resetPasswordForEmail`, but admin-callable.
-  const { error } = await admin.auth.admin.generateLink({
-    type: "recovery",
-    email: parsed.data.email,
-    options: { redirectTo },
-  });
+  const { error } = await supabase.auth.resetPasswordForEmail(
+    parsed.data.email,
+    { redirectTo },
+  );
   if (error) return { ok: false, error: `Reset failed: ${error.message}` };
   return { ok: true };
 }
