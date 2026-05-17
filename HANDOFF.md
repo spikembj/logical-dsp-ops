@@ -3,100 +3,116 @@
 > Read this **before SPEC.md** if you only have time for one. Read SPEC.md
 > right after — it is the source of truth for product behavior.
 >
-> **Updated 2026-05-16** after a full day of Phase 1.5 work (15+ shipped
-> passes building out the Safety/Quality dashboard, coaching workflow,
-> data-integrity guards, and production deploy). SPEC.md is current.
+> **Updated 2026-05-17** after Phase 2 Fleet shipped + driver-creation
+> policy tightened + round-two phantom cleanup + recent-activity panel
+> + quarterly PAVE tracking. SPEC.md is current.
 
 ## 1. Current Status
 
-**Phase:** Phase 1 + Phase 1.5 fully shipped and live in production at
-**`https://logical-ops.vercel.app`**. Both the user and their boss have
-working accounts; the app is in active daily use.
+**Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) all shipped and live in
+production at **`https://logical-ops.vercel.app`**. Daily-use app for the
+user and their boss; everything imported and clicked through today end-
+to-end.
 
 **What works end-to-end:**
 - Auth + role middleware (Owner / HR / Ops Manager / Dispatcher)
-- 7 import surfaces (DSP Overview CSV, Scorecard PDF, Netradyne CSV,
-  Escalations CSV, Concessions CSV, CDF Negative CSV, POD Details PDF)
-  — all with SHA-256 hard-block on duplicate uploads
-- Drivers list, driver detail (4 tabs), Last Coached relative-time
-- Coaching lifecycle: create, edit, void, unvoid, acknowledge, audit trail
-- Coaching dialog auto-fills + auto-categorizes when opened from a trigger
-- Per-category trigger clearing — coaching a safety issue clears the
-  safety trigger but leaves quality untouched
-- Performance dashboard with **Safety / Quality view toggle** (URL-driven,
-  defaults to Quality). Each view has its own:
-  - 4 stat tiles (incl. a clickable "above/below threshold" tile with a
-    popover driver list)
-  - Company trend chart (per-event-type for Safety; percent / DPMO
-    toggle for Quality)
-  - Top / Most-improved / Bottom 5 leaderboards
-  - Full-width Needs Coaching hero (filtered to the active view)
-  - Two donuts (impacting + non-impacting for Safety; CDF + DSB for
-    Quality)
+- **8 import surfaces** — DSP Overview CSV, Scorecard PDF, Netradyne CSV,
+  Escalations CSV, Concessions CSV, CDF Negative CSV, POD Details PDF,
+  **Vehicles XLSX**. All with SHA-256 hard-block on duplicate uploads.
+- Drivers list + driver detail (4 tabs incl. Performance with the new
+  recent-activity panel for drivers without scorecards)
+- Coaching lifecycle: create, edit, void, unvoid, acknowledge, audit
+  trail. Per-category trigger clearing (safety / quality / escalation),
+  trigger-pre-fill auto-categorization.
+- Performance dashboard with Safety / Quality view toggle (URL-driven,
+  defaults to Quality). Each view: 4 stat tiles, company trend chart,
+  3 leaderboards, full-width Needs Coaching hero, two donuts.
 - Management page with dispatcher↔driver FK picker
-- Employees page with Add / Edit / position (Driver / Helper) / vehicle
-  types (CDV / EDV / Standard Parcel)
+- Employees page (admin CRUD for drivers + helpers) — **likely to be
+  merged into the Drivers page in a near-term pass; see §6.**
+- **Fleet dashboard** at `/fleet` with 4 tiles (Operational, Grounded,
+  Reg expiring, Open issues), "In the shop" hero grouped by shop
+  location, Open issues hero, collapsible registration roster, and a
+  bottom **PAVE** tile (Periodic Amazon Vehicle Evaluation) with
+  per-quarter status + inline mark-complete.
+- `/fleet/vans` searchable list with manual-override pill + filter
+  chips, inline QR icon per row
+- `/fleet/vans/[vin]` tabbed detail (Overview / Issues / Parts)
+  including the status-override widget (B+badge merge semantics) and
+  the PAVE history mini-section on Overview
+- `/fleet/qr-sheet` printable VIN-encoded QR labels (per-van include
+  checkboxes, browser-print to letter-size)
+- Per-van QR modal everywhere (table icon, detail header, QR sheet)
 
-**Known broken:** none reported. Production smoke-tested today end-to-end.
+**Known broken:** none reported.
 
-## 2. Design principles that came out of today's work
+## 2. Design principles (additive to prior list — don't drop the old ones)
 
-These aren't bugs to fix — they're principles to honor in future passes.
+These are the principles to honor in future passes. The earlier four from
+Phase 1.5 still hold; Phase 2 added two more.
 
 ### "No guesswork" — the dashboard is the source of truth, not memory
 When something is addressed, it should visibly clear from the action list
 without manager intervention. When something needs attention, it should
-appear precisely once with enough context to act. The user articulated
-this explicitly while building the per-category trigger clearing and
-trigger-pre-fill flows. Carry this into Fleet / Daily Ops / HR when
-those land.
+appear precisely once with enough context to act. Carry this into every
+new dashboard.
 
 ### Categorize for clearing, not for categorizing
-`coaching_sessions.category` (safety / quality / escalation / other) exists
-to drive which trigger list a session clears — not as a user-facing
-classification axis. The user originally wanted no category at all;
-keeping it as a hidden, auto-set column was the compromise. The
-session_type enum (incl. `training`) is the visible signal.
+`coaching_sessions.category` (safety / quality / escalation / other)
+exists to drive which trigger list a session clears. The user originally
+wanted no category at all; keeping it as a hidden, auto-set column was
+the compromise. session_type (incl. `training`) is the visible signal.
 
 ### Two-DSP defenses
-Netradyne camera accounts span DUT4 + DUT7 at this org. The Netradyne
-importer **never auto-creates drivers** — unmatched names are skipped,
-with a fuzzy-fallback (nickname dict + first-name-prefix + extra-last-
-name-token) for the legal-vs-nickname mismatch. Drivers join this DSP
-only when they appear in a station-specific Amazon import (scorecards /
-DSP Overview / POD Details / Concessions / CDF Negative / Escalations).
-A one-time cleanup migration in 20260515235252 purged drivers that only
-had Netradyne data.
+Netradyne camera accounts span DUT4 + DUT7. Amazon also publishes some
+reports as `_ALL_…csv` (concessions is one). The driver-creation policy
+is now: **only Scorecard, DSP Overview, and the Employees admin page may
+create driver rows.** Every other import (Netradyne, Concessions, CDF
+Negative, Escalations, POD Details, Vehicles) is match-only — unmatched
+names are counted as "Skipped (not in our DSP)" on the result card.
+Round-one cleanup was migration 20260515235252; round-two cleanup is
+20260517185341 (catches the broader policy).
 
 ### Date-field semantics differ per surface — by design
-- Safety donuts: **rolling last 7 days** of `event_date` (daily Netradyne
-  uploads).
-- CDF donut + tile #2: latest Sun-Sat **delivery_date week** from the
-  data sources (not scorecards — scorecards may lead the defect data).
+- Safety donuts: rolling last 7 days of `event_date`.
+- CDF donut + tile #2: latest Sun-Sat **delivery_date week** from data
+  sources (not scorecards — scorecards may lead defect data).
 - DSB donut: latest Sun-Sat **concession_date week** — Amazon counts
-  DSBs against the week they filed the concession (financial scorecard
-  semantic), not the delivery week.
+  DSBs against the week they filed the concession.
 - Quality leaderboards: latest scorecard `week_ending`.
 - Safety leaderboards: rolling last 7 days; eligibility = drivers in
   latest scorecard.
-
-Each surface's subtitle labels its own week so the user can see when
-two surfaces are showing different periods.
+- Each surface's subtitle labels its own week so cross-period reads are
+  visible.
 
 ### Amazon Week 1 = Sun-Sat week containing Jan 1
-Not "first Sunday ≥ Jan 1." This was a real bug in `amazonWeekEnding` /
-`amazonWeekFromEndingDate` discovered today — every "Week N" label and
-every parser-computed `week_ending` was off by +7 days. Fixed in
-`lib/format/dates.ts`. A one-time SQL backfill shifted existing
-`scorecards.week_ending` and `pod_details.week_ending` rows back by 7
-days to match (no migration file — pure data cleanup specific to this
-DB's accumulated state).
+Not "first Sunday ≥ Jan 1." Fixed in `lib/format/dates.ts`. One-time
+SQL backfill shifted existing `scorecards.week_ending` and
+`pod_details.week_ending` by 7 days.
+
+### Phase 2 additions
+
+**Scope is what Amazon doesn't surface well.** Amazon's own dashboards
+own PMs, DVIC/AVI inspections, DOT/BIT, odometer defects, warning lights,
+mileage. Our Fleet module fills the gaps Amazon leaves: status (with
+manual overrides), registration expiry, shop location, our own minor-
+issue / parts tracker, QR labels, PAVE compliance. Resist the urge to
+duplicate Amazon-owned data.
+
+**Locally-managed vs Amazon-managed fields are separated explicitly.**
+On `vehicles`, Amazon-managed columns get overwritten on every import;
+locally-managed fields (shop location, EOD parking, notes) are never
+touched. The operational status column is *override-aware*: a manual
+override stops imports from overwriting it, with a UI callout showing
+what Amazon currently reports and a one-click "use Amazon's value" to
+clear. Same pattern is the right starting point if other Phase 2/3
+features need to merge user-managed and source-of-truth data.
 
 ## 3. Active gotchas
 
 ### Filesystem flake (macOS APFS)
-Occasional `ENOENT` / `ETIMEDOUT` / "short read" errors during builds.
-Not code — APFS / Spotlight indexing. Remedy:
+Occasional `ENOENT` / `ETIMEDOUT` / "short read" during builds. Not
+code — APFS / Spotlight indexing. Remedy:
 ```bash
 rm -rf .next node_modules/.cache && npm install && npm run dev
 ```
@@ -107,10 +123,12 @@ rm -rf .next node_modules/.cache && npm install && npm run dev
 re-testing.
 
 ### shadcn flavor = base-ui, not Radix
-Components in `components/ui/*` wrap `@base-ui/react/*`. Some prop
-differences:
+Components in `components/ui/*` wrap `@base-ui/react/*`. Prop
+differences worth knowing:
 - `DropdownMenuTrigger` does NOT accept `asChild`
 - `Tabs`, `Dialog`, `Checkbox`, `Select` follow base-ui's API
+- `Select.onValueChange` receives `string | null` (not `string`) — wrap
+  with `(v) => set(v ?? defaultValue)` to satisfy types
 
 ### TypeScript strictness on event handlers
 Use `e.currentTarget.value`, not `e.target.value`. Latter trips base-ui
@@ -120,14 +138,27 @@ inputs under Next 16 strict.
 pdfjs-dist needs `DOMMatrix` / `Path2D` / `ImageData` globals that Node
 doesn't ship. `lib/parsing/pdfjs-node-polyfill.ts` polyfills them via
 `@napi-rs/canvas`; both packages are listed in `serverExternalPackages`
-in `next.config.ts`. The pdf.worker.mjs file is force-included in the
-Vercel deployment via `outputFileTracingIncludes` (also in next.config).
+in `next.config.ts`. The pdf.worker.mjs file is force-included via
+`outputFileTracingIncludes` (also in next.config).
+
+### xlsx (SheetJS) audit warning
+`npm audit` reports a high-severity finding for `xlsx` (prototype
+pollution + ReDoS). Practical impact for our use case (parsing only
+Amazon's xlsx, behind auth, internal app, files we control) is
+negligible. Don't ignore forever — revisit if scope grows.
 
 ### Git committer identity
-The sandbox can't auto-detect `user.email`. Commits in this worktree use
-the inline form `git -c user.email="spikembj@gmail.com" -c
-user.name="Michael Jorgensen" commit ...`. Don't set this in global
-config without the user's explicit say-so.
+Sandbox can't auto-detect `user.email`. Commits use the inline form
+`git -c user.email="spikembj@gmail.com" -c user.name="Michael Jorgensen"
+commit ...`. Don't set this in global config without the user's say-so.
+
+### Server-only modules in client components
+`lib/queries/fleet.ts` imports `server-only`. Types + pure helpers
+(`daysUntilExpiry`, `quarterOf`, the row types) live in `fleet-types.ts`
+so client components can import them without dragging the server module
+into the bundle. Pattern: when a new query module is added and its types
+get used in any client component, split the types into a sibling
+`<name>-types.ts` file.
 
 ## 4. Access & environment
 
@@ -139,11 +170,10 @@ SUPABASE_SERVICE_ROLE_KEY     # server-only
 NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 ```
 
-### Vercel scope on env vars
-- The three `NEXT_PUBLIC_*` vars + `NEXT_PUBLIC_DEFAULT_TZ` are scoped
-  to **all environments** (Production / Preview / Development).
-- `SUPABASE_SERVICE_ROLE_KEY` is **Production only** by design (limits
-  blast radius if a preview URL leaks).
+### Vercel env scope
+- `NEXT_PUBLIC_*` vars + `NEXT_PUBLIC_DEFAULT_TZ`: all environments
+- `SUPABASE_SERVICE_ROLE_KEY`: **Production only** (limits blast radius
+  if a preview URL leaks)
 
 ### Connected services
 - **Supabase project:** `oaufkjqtjecffpkcwewp`
@@ -157,69 +187,81 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 ## 5. Database state
 
 **Supabase migrations applied** (everything in `supabase/migrations/`
-has been run against the live DB). Chronological with brief purpose:
+has been run against the live DB). New since the previous HANDOFF:
 
 ```
-20260501214330  init (enums, tables, RLS, triggers)
-20260501214340  baseline GRANTs
-20260502152928  coaching soft-void + acknowledge RPC
-20260502165843  drivers nullable transporter_id
-20260502173649  scorecards cdf integer (numeric overflow fix)
-20260502180054  scorecards full columns (delivered/ced/dsb/...)
-20260502203356  scorecards allow UPDATE (initial — superseded by RLS gap fix below)
-20260502222114  safety_events admin DELETE
-20260503143410  inactive status + platinum tiers + session_type
-20260503164204  scorecards overall_score
-20260503211220  escalations table
-20260504104233  refresh_active_status bidirectional
-20260508165130  concessions table
-20260508170543  cdf_negative table
-20260508191643  pod_details table
-20260508231023  position enum + standard_parcel rename
-20260509071714  management roles (enum add)
-20260509073330  management roles part 2 (data + RLS via is_management())
-20260515215557  RLS gap backfill (9 UPDATE/DELETE policies)
-20260515235252  drop netradyne phantom drivers (one-time cleanup)
-20260516002944  drop rivian vehicle type
-20260516025815  users.driver_id FK (dispatcher↔driver linkage)
-20260516072730  coaching_sessions.category column
-20260516171320  coaching_session_type: add 'training'
+20260517000344  fleet phase 2 (vehicles, vehicle_issues, vehicle_parts,
+                operational_status_source override fields, grounding
+                auto-issue function)
+20260517185341  phantom drivers round two (broader policy: drivers
+                without scorecard or coaching are phantoms)
+20260517200214  vehicle_pave_inspections (quarterly PAVE tracking +
+                quarter/year sync trigger)
 ```
 
-**One-off SQL run today (not versioned)** — these are state-specific
-cleanups, not schema migrations, and shouldn't go in `migrations/`:
-- Shifted `scorecards.week_ending` and `pod_details.week_ending` back
-  by 7 days after the Amazon-Week-1 helper fix.
+Plus all prior migrations from previous HANDOFF.
+
+**Live data state worth knowing:**
+- 60 vehicles imported via Amazon `VehiclesData.xlsx` (DUT7 only)
+- Round-two phantom cleanup deleted concession-only / Netradyne-only
+  drivers and their dependent rows. Confirmed by user — list was 100%
+  DUT4 names before applying.
+- PAVE inspections table currently empty; tracking starts with first
+  Q2 2026 inspection recorded.
 
 ## 6. Open / deferred / out-of-scope
 
 ### Open (small / nice-to-have)
+- **Merge `/admin/employees` into `/drivers`** — proposed by user at end
+  of 2026-05-17 session. Idea: one Drivers page, with management-only
+  Add / Edit affordances. Sidebar drops the Employees entry. Discussion
+  pending; not yet implemented. See "Discussion notes" below.
 - **Per-period tracking on `file_imports`** (was Pass 8). Would add
-  `period_start` / `period_end` for audit trail + future Import History
-  view. Donut alignment no longer needs it — anchors read data-source
-  dates directly. **Low priority.**
-- **Linked scorecard/event UI on coaching sessions.** Schema fields
+  `period_start` / `period_end` for audit trail. Low priority — donut
+  alignment no longer needs it.
+- **Linked scorecard / event UI on coaching sessions.** Schema fields
   already exist; no picker UI.
 - **Downloadable error CSVs from the Import result card.**
+- **"Show all" toggle on the PAVE history mini-section** — currently
+  shows last 4 inspections; older still in DB but not surfaced.
+- **Fleet history tab** on van detail was explicitly deferred from
+  Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2 / 3 — the next big builds (user-flagged)
-- **Daily Ops dashboard** at its own route. Day-of planning, call-outs,
-  who's where. Replaces a spreadsheet.
-- **Fleet / VCR tracking.** Vehicle assignment, damages, mileage.
+### Phase 2 follow-ons / Phase 3 (user-flagged)
+- **Daily Ops dashboard.** Day-of planning, van-to-driver assignments,
+  call-outs, route counts. Replaces a spreadsheet. User is collecting
+  screenshots + reference files for the design conversation. This is
+  the most actively-wanted next branch.
 - **HR / hiring.** Onboarding, document expiry, training certs.
+- **Driver-facing VCR submission** (Phase 3 — Phase 2 ships manager-
+  tracked issues + parts + QR). Photo-driven damage detection also
+  Phase 3.
+- **Incidents / accidents with insurance + photos.** Separate from
+  `vehicle_issues` which covers operational damage.
 
-The user wants Phase 2 dashboards to follow the same patterns the
-Performance dashboard settled on: view toggle in the header where the
-content meaningfully splits, clickable threshold tiles with popovers,
-data-source-driven anchors, "no guesswork" trigger clearing where
-applicable.
-
-### Explicitly out of scope (Phase 3+)
+### Explicitly out of scope
 - ADP / Slack / Rivian portal integrations
 - Mobile app
-- Auto-scraping of Amazon DSP portal (TOS / contract risk — discussed
-  and tabled; user will continue manual / email-attachment uploads
-  unless a safer path emerges, e.g. Netradyne's enterprise API)
+- Auto-scraping of Amazon DSP portal (TOS / contract risk — tabled).
+  Continue manual / email-attachment uploads unless a safer path
+  emerges (e.g. Netradyne enterprise API).
+
+### Discussion notes — Employees → Drivers merge proposal
+User noted that the Employees admin page and the Drivers list duplicate
+nearly all surface — same roster, with Employees adding edit/create
+affordances. Proposal: collapse to one Drivers page, gate edit/create
+behind `is_management()` so dispatchers see read-only, owners/HR/ops_
+managers see Add Driver / Add Helper / inline Edit.
+
+Open questions to settle before building:
+1. Helpers are `position='helper'` on the same `drivers` table. Do
+   they appear in the unified list by default, behind a filter chip,
+   or stay segregated?
+2. Does the driver detail page (multi-tab profile) work for helpers,
+   or does it need a stripped-down view? (Helpers have no scorecards /
+   safety events / coaching.)
+3. Sidebar entry for Employees presumably goes away. Anyone navigating
+   there directly hits a 404 / redirect to /drivers?
 
 ## 7. Folder structure (current)
 
@@ -229,16 +271,21 @@ applicable.
 ├── app/
 │   ├── (app)/
 │   │   ├── admin/
-│   │   │   ├── employees/         # CRUD for drivers + helpers (was "drivers admin")
-│   │   │   └── users/             # Management page (incl. dispatcher↔driver picker)
+│   │   │   ├── employees/         # CRUD for drivers + helpers (merge candidate)
+│   │   │   └── users/             # Management page (dispatcher↔driver picker)
 │   │   ├── drivers/
 │   │   │   ├── [id]/              # Driver detail (layout + 4 tabs)
-│   │   │   └── page.tsx           # Drivers list (with Last Coached column)
-│   │   ├── import/page.tsx        # 7-tab import surface
+│   │   │   └── page.tsx           # Drivers list (Last Coached column)
+│   │   ├── fleet/
+│   │   │   ├── page.tsx           # Fleet dashboard (tiles + heroes + roster + PAVE)
+│   │   │   ├── vans/page.tsx      # Vehicles list
+│   │   │   ├── vans/[vin]/        # Vehicle detail (Overview / Issues / Parts)
+│   │   │   └── qr-sheet/page.tsx  # Printable VIN-QR labels
+│   │   ├── import/page.tsx        # 8-tab import surface
 │   │   ├── layout.tsx
 │   │   └── page.tsx               # Performance dashboard (Safety/Quality split)
 │   ├── (auth)/login/
-│   ├── actions/                   # 10 server-action files
+│   ├── actions/                   # 11 server-action files (added fleet.ts, vehicles-import.ts)
 │   ├── auth/callback/
 │   ├── globals.css
 │   └── layout.tsx
@@ -246,17 +293,19 @@ applicable.
 │   ├── app/
 │   │   ├── admin/                 # users-table + drivers-admin
 │   │   ├── coaching/              # log/edit/void dialog, session card+list, triggers panel
-│   │   ├── dashboard/             # view-toggle, threshold-tile, leaderboards (Safety + Quality),
-│   │   │                          # needs-coaching-list, safety-donuts, quality-donuts,
-│   │   │                          # safety-trend-chart, quality-trend-chart, stat-tile
+│   │   ├── dashboard/             # view-toggle, threshold-tile, leaderboards,
+│   │   │                          # needs-coaching-list, donuts, trend charts, stat-tile
 │   │   ├── defects/, import/, perf/, safety-events/
+│   │   ├── fleet/                 # vehicle-tile, vehicles-table, vehicle-detail,
+│   │   │                          # vehicle-overview/issues/parts-tab,
+│   │   │                          # vehicle-qr-button, qr-sheet, pave-tile
 │   │   └── …driver-tabs, sidebar-nav, sign-out, theme-*
 │   └── ui/                        # shadcn (base-ui flavor) primitives
 ├── lib/
 │   ├── auth/require-role.ts
 │   ├── format/                    # badges, dates (incl. Amazon-week helpers)
-│   ├── parsing/                   # 5 parsers + file-hash helper + pdfjs polyfill
-│   ├── queries/                   # 10 query helpers (incl. coaching-triggers, dashboard)
+│   ├── parsing/                   # 6 parsers + file-hash + pdfjs polyfill + vehicles-xlsx
+│   ├── queries/                   # 12 query helpers (added fleet.ts, fleet-types.ts)
 │   ├── supabase/                  # client / server / middleware
 │   ├── types/database.ts
 │   ├── util/
@@ -265,17 +314,18 @@ applicable.
 │   └── utils.ts
 ├── public/
 ├── scripts/                       # seed-drivers-from-csv.mjs
-├── supabase/migrations/           # 24 migrations (see §5)
-├── proxy.ts                       # root proxy (Next 16 rename of middleware)
+├── supabase/migrations/           # 27 migrations (see §5)
+├── proxy.ts                       # Next 16 rename of middleware.ts
 ├── next.config.ts                 # serverExternalPackages + outputFileTracingIncludes
 ├── package.json
 ├── SPEC.md                        # Source of truth
 └── HANDOFF.md                     # This file
 ```
 
-`_reference/` (gitignored) holds the user's real CSVs/PDFs we built
-parsers against. Files we never matched against a parser were moved to
-`_reference/_unused/` for the user to permanently delete if desired.
+`_reference/` (gitignored) holds the user's real CSVs/PDFs/XLSX we
+built parsers against. Files never matched against a parser are in
+`_reference/_unused/` for the user to delete if desired. Daily Ops
+reference files will land here next.
 
 ## 8. Starter prompt for next session
 
@@ -290,16 +340,18 @@ Paste this verbatim if starting a fresh session:
 >
 > Confirm you've read both. Then before writing any code, tell me:
 > - One-paragraph summary of where the project is.
-> - Any clarifying questions on the design principles (§2 of HANDOFF)
->   or the open items list.
-> - Which Phase 2 direction (Daily Ops / Fleet / HR) you'd recommend
->   starting with, and why — or which deferred item you'd pick up first.
+> - Any clarifying questions on the design principles (§2) or the open
+>   items list (§6).
+> - Which open item or next-phase direction you'd recommend starting
+>   with, and why.
 >
 > Treat SPEC.md as authoritative. Update SPEC.md in the same commit
-> as any code change that contradicts or extends it.
+> as any code change that contradicts or extends it. SQL migrations
+> should be pasted inline as a fenced ```sql block, not as a GitHub
+> link — the user pastes them directly into Supabase's SQL editor.
 >
-> Quality / Safety dashboards, coaching workflow, all 7 imports, and
-> production deploy are all live and stable. Don't reinvent any of
-> them — extend the patterns when adding new dashboards.
+> Performance + Safety + Quality + Fleet dashboards, coaching workflow,
+> all 8 imports, and production deploy are all live and stable. Don't
+> reinvent any of them — extend the patterns when adding new surfaces.
 
 ---
