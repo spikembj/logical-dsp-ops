@@ -26,7 +26,7 @@ async function siteOrigin(): Promise<string> {
 /** Where Supabase should send invite / recovery clicks. */
 async function setPasswordRedirect(): Promise<string> {
   const origin = await siteOrigin();
-  return `${origin}/auth/callback?next=/auth/set-password`;
+  return `${origin}/auth/callback?next=/set-password`;
 }
 
 const RoleSchema = z.enum([
@@ -195,7 +195,7 @@ const SendPasswordResetSchema = z.object({ email: z.string().email() });
  * they used it (Supabase invite tokens are valid for 24h by default).
  *
  * The recovery link lands at /auth/callback → forwards to
- * /auth/set-password so the user can pick a new password and proceed.
+ * /set-password so the user can pick a new password and proceed.
  */
 export async function sendPasswordReset(
   input: z.infer<typeof SendPasswordResetSchema>,

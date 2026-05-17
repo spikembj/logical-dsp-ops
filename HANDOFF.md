@@ -157,7 +157,7 @@ commit ...`. Don't set this in global config without the user's say-so.
 ### Auth invite / recovery requires the set-password landing page
 Supabase's `inviteUserByEmail` and `resetPasswordForEmail` issue a
 session token but do NOT actually set a password — that's our app's
-job. `/auth/set-password` handles it: invite/recovery clicks go through
+job. `/set-password` handles it: invite/recovery clicks go through
 `/auth/callback` (which exchanges the token) and forward to the form
 where the user picks a password. Both actions pass `redirectTo` so the
 right destination is baked into the email link, and the callback has a
