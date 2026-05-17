@@ -154,6 +154,18 @@ Sandbox can't auto-detect `user.email`. Commits use the inline form
 `git -c user.email="spikembj@gmail.com" -c user.name="Michael Jorgensen"
 commit ...`. Don't set this in global config without the user's say-so.
 
+### Auth invite / recovery requires the set-password landing page
+Supabase's `inviteUserByEmail` and `resetPasswordForEmail` issue a
+session token but do NOT actually set a password — that's our app's
+job. `/auth/set-password` handles it: invite/recovery clicks go through
+`/auth/callback` (which exchanges the token) and forward to the form
+where the user picks a password. Both actions pass `redirectTo` so the
+right destination is baked into the email link, and the callback has a
+belt-and-suspenders fallback for `type=invite`/`recovery` even when
+`next` isn't present. **Without this, new teammates get logged in once
+on invite click and then are locked out on their next session** —
+verified by Manny's lockout on 2026-05-17 which kicked off this fix.
+
 ### Server-only modules in client components
 `lib/queries/fleet.ts` imports `server-only`. Types + pure helpers
 (`daysUntilExpiry`, `quarterOf`, the row types) live in `fleet-types.ts`

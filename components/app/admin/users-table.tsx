@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Link2, Link2Off, Search, UserPlus, X } from "lucide-react";
+import { KeyRound, Link2, Link2Off, Search, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import {
   inviteUser,
+  sendPasswordReset,
   setUserActive,
   setUserDriverLink,
   setUserRole,
@@ -87,6 +88,7 @@ export function UsersAdmin({
               <TableHead>Driver record</TableHead>
               <TableHead>Active</TableHead>
               <TableHead className="hidden md:table-cell">Joined</TableHead>
+              <TableHead className="text-right w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -151,6 +153,22 @@ function UserRowItem({
       }
       toast.success("Driver link removed.");
       router.refresh();
+    });
+  }
+  function handleReset() {
+    if (
+      !confirm(
+        `Send a password-reset email to ${user.email}? They will get a link to choose a new password.`,
+      )
+    )
+      return;
+    startTransition(async () => {
+      const res = await sendPasswordReset({ email: user.email });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Reset link sent to ${user.email}.`);
     });
   }
 
@@ -228,6 +246,18 @@ function UserRowItem({
       </TableCell>
       <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
         {formatSessionDate(user.created_at.slice(0, 10))}
+      </TableCell>
+      <TableCell className="text-right">
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={pending}
+          title={`Send password reset link to ${user.email}`}
+          aria-label="Send password reset link"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+        </button>
       </TableCell>
     </TableRow>
   );

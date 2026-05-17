@@ -1,12 +1,33 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import {
   createClient,
   createServiceRoleClient,
 } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/types/database";
+
+/**
+ * Derive the absolute origin (https://logical-ops.vercel.app or
+ * http://localhost:3000) for `redirectTo` values handed to Supabase
+ * Auth. Reads forwarded headers so it works behind Vercel's proxy.
+ */
+async function siteOrigin(): Promise<string> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  if (host) return `${proto}://${host}`;
+  // Fallback for edge cases — won't be hit in normal request flow.
+  return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+}
+
+/** Where Supabase should send invite / recovery clicks. */
+async function setPasswordRedirect(): Promise<string> {
+  const origin = await siteOrigin();
+  return `${origin}/auth/callback?next=/auth/set-password`;
+}
 
 const RoleSchema = z.enum([
   "owner",
@@ -73,7 +94,10 @@ export async function inviteUser(
   const { email, full_name, role } = parsed.data;
 
   const admin = createServiceRoleClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email);
+  const redirectTo = await setPasswordRedirect();
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+  });
   if (error) {
     return { ok: false, error: `Invite failed: ${error.message}` };
   }
@@ -160,5 +184,38 @@ export async function setUserDriverLink(
     .eq("id", parsed.data.user_id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+const SendPasswordResetSchema = z.object({ email: z.string().email() });
+
+/**
+ * Send a password-recovery email to a teammate. Use this when someone
+ * forgets their password or when an invite-email link expired before
+ * they used it (Supabase invite tokens are valid for 24h by default).
+ *
+ * The recovery link lands at /auth/callback → forwards to
+ * /auth/set-password so the user can pick a new password and proceed.
+ */
+export async function sendPasswordReset(
+  input: z.infer<typeof SendPasswordResetSchema>,
+): Promise<ActionResult> {
+  const gate = await requireManagement();
+  if (!gate.ok) return gate;
+  const parsed = SendPasswordResetSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false, error: parsed.error.issues[0]!.message };
+
+  const admin = createServiceRoleClient();
+  const redirectTo = await setPasswordRedirect();
+  // generateLink('recovery', ...) returns the action_link AND triggers
+  // the recovery email via the project's SMTP settings — same email the
+  // user would get from `resetPasswordForEmail`, but admin-callable.
+  const { error } = await admin.auth.admin.generateLink({
+    type: "recovery",
+    email: parsed.data.email,
+    options: { redirectTo },
+  });
+  if (error) return { ok: false, error: `Reset failed: ${error.message}` };
   return { ok: true };
 }
