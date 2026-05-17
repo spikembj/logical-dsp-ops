@@ -157,6 +157,84 @@ export const listVehicleIssues = cache(
   },
 );
 
+// ---------------------------------------------------------------------------
+// PAVE (Periodic Amazon Vehicle Evaluation) — quarterly mandatory inspection
+// ---------------------------------------------------------------------------
+
+import type { PaveInspectionRow, PaveQuarterStatus } from "./fleet-types";
+
+/** All PAVE inspections for a vehicle, newest first. */
+export const listPaveInspectionsForVehicle = cache(
+  async (vehicleId: string): Promise<PaveInspectionRow[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicle_pave_inspections")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("year", { ascending: false })
+      .order("quarter", { ascending: false })
+      .order("completed_date", { ascending: false });
+    if (error) {
+      console.error("listPaveInspectionsForVehicle failed:", error);
+      return [];
+    }
+    return (data as PaveInspectionRow[]) ?? [];
+  },
+);
+
+/**
+ * Per-vehicle PAVE status for a given quarter, indexed by vehicle_id.
+ * Includes every passed-in vehicle, even those with zero inspections this
+ * quarter (latestScore = null), so callers don't need to merge by hand.
+ */
+export const getPaveStatusForQuarter = cache(
+  async (
+    vehicleIds: string[],
+    quarter: number,
+    year: number,
+  ): Promise<Map<string, PaveQuarterStatus>> => {
+    const result = new Map<string, PaveQuarterStatus>();
+    for (const id of vehicleIds) {
+      result.set(id, {
+        vehicleId: id,
+        latestScore: null,
+        latestDate: null,
+        attemptCount: 0,
+      });
+    }
+    if (vehicleIds.length === 0) return result;
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicle_pave_inspections")
+      .select("vehicle_id, completed_date, score")
+      .in("vehicle_id", vehicleIds)
+      .eq("quarter", quarter)
+      .eq("year", year)
+      .order("completed_date", { ascending: false });
+    if (error) {
+      console.error("getPaveStatusForQuarter failed:", error);
+      return result;
+    }
+
+    for (const row of (data ?? []) as {
+      vehicle_id: string;
+      completed_date: string;
+      score: 1 | 2 | 3 | 4;
+    }[]) {
+      const s = result.get(row.vehicle_id);
+      if (!s) continue;
+      s.attemptCount += 1;
+      // Order desc, so the first row we see per vehicle is the latest.
+      if (s.latestScore === null) {
+        s.latestScore = row.score;
+        s.latestDate = row.completed_date;
+      }
+    }
+    return result;
+  },
+);
+
 export const listVehicleParts = cache(
   async (vehicleId: string): Promise<VehiclePartRow[]> => {
     const supabase = await createClient();

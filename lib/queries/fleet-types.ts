@@ -127,3 +127,54 @@ export function daysUntilExpiry(iso: string | null): number | null {
   const exp = new Date(`${iso}T00:00:00Z`);
   return Math.round((exp.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
 }
+
+// ---------------------------------------------------------------------------
+// PAVE (Periodic Amazon Vehicle Evaluation)
+// ---------------------------------------------------------------------------
+
+export interface PaveInspectionRow {
+  id: string;
+  vehicle_id: string;
+  completed_date: string; // YYYY-MM-DD
+  quarter: 1 | 2 | 3 | 4;
+  year: number;
+  score: 1 | 2 | 3 | 4;
+  recorded_by: string | null;
+  created_at: string;
+}
+
+/** Compute (quarter, year) for a given Date — calendar quarters, UTC. */
+export function quarterOf(d: Date): { quarter: 1 | 2 | 3 | 4; year: number } {
+  const month = d.getUTCMonth(); // 0-11
+  const quarter = (Math.floor(month / 3) + 1) as 1 | 2 | 3 | 4;
+  return { quarter, year: d.getUTCFullYear() };
+}
+
+/** "Q2 2026" — short label for headers/badges. */
+export function formatQuarter(quarter: number, year: number): string {
+  return `Q${quarter} ${year}`;
+}
+
+/**
+ * Per-vehicle PAVE status for a given quarter.
+ *   - `latestScore` null = no inspection this quarter ("not done")
+ *   - `latestScore >= 3` = acceptable
+ *   - `latestScore <= 2` = re-inspect required
+ *
+ * The "latest" wins so a re-inspection with a better score supersedes the
+ * earlier failing one.
+ */
+export interface PaveQuarterStatus {
+  vehicleId: string;
+  latestScore: 1 | 2 | 3 | 4 | null;
+  latestDate: string | null; // YYYY-MM-DD
+  attemptCount: number; // how many inspections in this quarter
+}
+
+export type PaveStatusBucket = "done" | "needs_reinspect" | "not_done";
+
+export function bucketFor(status: PaveQuarterStatus): PaveStatusBucket {
+  if (status.latestScore === null) return "not_done";
+  if (status.latestScore >= 3) return "done";
+  return "needs_reinspect";
+}

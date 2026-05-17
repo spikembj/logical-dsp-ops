@@ -322,3 +322,68 @@ export async function deleteVehiclePart(
   revalidatePath("/fleet/vans");
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// PAVE inspections
+// ---------------------------------------------------------------------------
+const CreatePaveSchema = z.object({
+  vehicle_id: z.string().uuid(),
+  completed_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+  score: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+});
+
+export async function createPaveInspection(
+  input: z.infer<typeof CreatePaveSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = CreatePaveSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // quarter/year are auto-derived from completed_date by the DB trigger.
+  // Send placeholder values that satisfy the not-null check.
+  const placeholderDate = new Date(`${parsed.data.completed_date}T00:00:00Z`);
+  const placeholderQuarter = Math.floor(placeholderDate.getUTCMonth() / 3) + 1;
+  const placeholderYear = placeholderDate.getUTCFullYear();
+
+  const { error } = await supabase.from("vehicle_pave_inspections").insert({
+    vehicle_id: parsed.data.vehicle_id,
+    completed_date: parsed.data.completed_date,
+    score: parsed.data.score,
+    quarter: placeholderQuarter,
+    year: placeholderYear,
+    recorded_by: user?.id ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}
+
+const DeletePaveSchema = z.object({ inspection_id: z.string().uuid() });
+
+export async function deletePaveInspection(
+  input: z.infer<typeof DeletePaveSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = DeletePaveSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("vehicle_pave_inspections")
+    .delete()
+    .eq("id", parsed.data.inspection_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}

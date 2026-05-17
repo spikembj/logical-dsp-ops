@@ -20,8 +20,16 @@ import {
   updateVehicleLocalFields,
   setVehicleStatusOverride,
   clearVehicleStatusOverride,
+  deletePaveInspection,
 } from "@/app/actions/fleet";
-import type { VehicleRow } from "@/lib/queries/fleet-types";
+import {
+  formatQuarter,
+  type PaveInspectionRow,
+  type VehicleRow,
+} from "@/lib/queries/fleet-types";
+import { PaveDialog } from "./pave-tile";
+import { Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS: {
   value: VehicleRow["operational_status"];
@@ -45,7 +53,13 @@ function getAmazonStatus(
   return "operational";
 }
 
-export function VehicleOverviewTab({ vehicle }: { vehicle: VehicleRow }) {
+export function VehicleOverviewTab({
+  vehicle,
+  paveInspections,
+}: {
+  vehicle: VehicleRow;
+  paveInspections: PaveInspectionRow[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [shop, setShop] = useState(vehicle.current_shop_location ?? "");
@@ -281,7 +295,78 @@ export function VehicleOverviewTab({ vehicle }: { vehicle: VehicleRow }) {
           <Field label="Station" value={vehicle.station_code} />
         </dl>
       </section>
+
+      {/* PAVE history (last 4 inspections) */}
+      <section className="rounded-xl border bg-card p-4 lg:col-span-2 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">PAVE history</h2>
+          <PaveDialog
+            vehicleId={vehicle.id}
+            vehicleName={vehicle.vehicle_name || vehicle.vin}
+          />
+        </div>
+        {paveInspections.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">
+            No PAVE inspections recorded yet.
+          </p>
+        ) : (
+          <ul className="divide-y rounded-md border">
+            {paveInspections.slice(0, 4).map((p) => (
+              <PaveHistoryRow key={p.id} inspection={p} />
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
+  );
+}
+
+function PaveHistoryRow({ inspection }: { inspection: PaveInspectionRow }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const acceptable = inspection.score >= 3;
+
+  function handleDelete() {
+    if (!confirm("Delete this PAVE record? This can't be undone.")) return;
+    startTransition(async () => {
+      const res = await deletePaveInspection({ inspection_id: inspection.id });
+      if (res.ok) {
+        toast.success("Deleted.");
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  }
+
+  return (
+    <li className="px-3 py-2 flex items-center gap-3 text-sm">
+      <span className="text-xs text-muted-foreground tabular-nums min-w-16">
+        {formatQuarter(inspection.quarter, inspection.year)}
+      </span>
+      <span className="text-foreground/80 tabular-nums">
+        {format(parseISO(inspection.completed_date), "MMM d, yyyy")}
+      </span>
+      <span
+        className={cn(
+          "ml-auto text-xs font-medium tabular-nums rounded px-1.5 py-0.5",
+          acceptable
+            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+            : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+        )}
+      >
+        Score {inspection.score}
+      </span>
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={pending}
+        className="text-muted-foreground hover:text-destructive transition-colors"
+        aria-label="Delete PAVE record"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </li>
   );
 }
 

@@ -253,6 +253,15 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
 
+### `vehicle_pave_inspections`
+**One row per completed PAVE inspection.** PAVE = Periodic Amazon Vehicle Evaluation, mandatory quarterly per van. A van can have multiple inspections per quarter (e.g. score=2 in April triggers a re-inspection in May) — the latest row wins for "this quarter status." Failure is administrative only, never grounds the van.
+- `id`, `vehicle_id` (FK → vehicles.id, cascade)
+- `completed_date` (date)
+- `quarter` (int 1-4), `year` (int) — denormalized from `completed_date` via the `sync_pave_quarter_from_date` trigger so the "this quarter" lookup is a simple equality query
+- `score` (int 1-4) — 3 or 4 acceptable, 1 or 2 means re-inspect required
+- `recorded_by` (uuid → users.id, nullable)
+- `created_at`
+
 ## Helper SQL functions
 
 - `current_user_role()` (security definer) — reads caller's role for use in RLS.
@@ -263,6 +272,7 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `set_coaching_acknowledged(uuid, boolean)` (security definer, granted to authenticated) — lets dispatchers flip the acknowledged toggle without write access to the rest of the row.
 - `refresh_driver_active_status()` (security definer, returns activated_count + deactivated_count) — bidirectional: drivers with no recent activity in 60 days flip from `active` → `inactive`; drivers who reappear in scorecards/events flip back. Called automatically at the end of every import action.
 - `apply_vehicle_grounding_changes()` — called by the vehicles import after upserts land. For each van whose Amazon status flipped `operational` → `grounded`/`ready_for_audit`, create an auto-issue (if no open auto-issue exists). For each van that flipped back to `operational`, auto-close any open auto-issue. Manual-source rows are skipped entirely. Returns `(grounded_count, ungrounded_count)`.
+- `sync_pave_quarter_from_date()` — trigger on `vehicle_pave_inspections`. Derives `quarter` (1-4) and `year` from `completed_date` so the denormalized fields can't drift.
 
 ## Coaching Triggers (who needs coaching)
 

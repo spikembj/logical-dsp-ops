@@ -3,10 +3,13 @@ import { format, parseISO } from "date-fns";
 import { AlertTriangle, Wrench, MapPin, ArrowRight } from "lucide-react";
 import {
   getFleetDashboardData,
+  getPaveStatusForQuarter,
   daysUntilExpiry,
   type VehicleListItem,
 } from "@/lib/queries/fleet";
+import { bucketFor, quarterOf } from "@/lib/queries/fleet-types";
 import { VehicleTile } from "@/components/app/fleet/vehicle-tile";
+import { PaveTile } from "@/components/app/fleet/pave-tile";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,6 +24,36 @@ import { cn } from "@/lib/utils";
  */
 export default async function FleetPage() {
   const { vehicles, totals, byShop, openIssues } = await getFleetDashboardData();
+
+  // Quarterly PAVE roster, computed at request time. Operational vans only —
+  // grounded vans can't be inspected and we don't want them counted against us.
+  const { quarter, year } = quarterOf(new Date());
+  const paveCandidates = vehicles.filter(
+    (v) => v.operational_status === "operational",
+  );
+  const paveStatusMap = await getPaveStatusForQuarter(
+    paveCandidates.map((v) => v.id),
+    quarter,
+    year,
+  );
+  const paveRows = paveCandidates
+    .map((v) => {
+      const status = paveStatusMap.get(v.id)!;
+      return { vehicle: v, status, bucket: bucketFor(status) };
+    })
+    .sort((a, b) => {
+      // Order: needs_reinspect → not_done → done
+      const rank: Record<string, number> = {
+        needs_reinspect: 0,
+        not_done: 1,
+        done: 2,
+      };
+      const r = rank[a.bucket] - rank[b.bucket];
+      if (r !== 0) return r;
+      return (a.vehicle.vehicle_name || "").localeCompare(
+        b.vehicle.vehicle_name || "",
+      );
+    });
 
   const operationalList: VehicleListItem[] = vehicles.filter(
     (v) => v.operational_status === "operational",
@@ -141,6 +174,8 @@ export default async function FleetPage() {
 
       {/* Registration roster */}
       <RegistrationRoster vehicles={vehicles} />
+
+      <PaveTile quarter={quarter} year={year} rows={paveRows} />
     </div>
   );
 }
