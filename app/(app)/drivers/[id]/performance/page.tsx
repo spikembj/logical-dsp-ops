@@ -6,6 +6,7 @@ import {
   podRejectBreakdown,
 } from "@/lib/queries/pod-details";
 import { listDefectsForDriver } from "@/lib/queries/defects";
+import { listEventsForDriver } from "@/lib/queries/safety-events";
 import {
   amazonWeekFromEndingDate,
   formatSessionDate,
@@ -30,10 +31,11 @@ export default async function DriverPerformancePage({ params }: Props) {
   const { id } = await params;
   const driver = await getDriverById(id);
   if (!driver) notFound();
-  const [scorecards, podLatest, defects] = await Promise.all([
+  const [scorecards, podLatest, defects, safetyEvents] = await Promise.all([
     listScorecardsForDriver(id),
     getLatestPodDetails(id),
     listDefectsForDriver(id),
+    listEventsForDriver(id),
   ]);
   const podBreakdown = podLatest ? podRejectBreakdown(podLatest) : [];
 
@@ -72,19 +74,104 @@ export default async function DriverPerformancePage({ params }: Props) {
     }))
     .sort((a, b) => b.items.length - a.items.length);
 
+  // Sum of `count` across all event rows — Netradyne sometimes lumps
+  // multiple of the same event_type into one row with count>1.
+  const safetyEventTotal = safetyEvents.reduce(
+    (acc, e) => acc + (e.count ?? 0),
+    0,
+  );
+  const safetyImpactingTotal = safetyEvents
+    .filter((e) => e.severity === "impacting")
+    .reduce((acc, e) => acc + (e.count ?? 0), 0);
+
+  const hasAnyActivity =
+    safetyEvents.length > 0 ||
+    concessions.length > 0 ||
+    cdfRows.length > 0 ||
+    !!podLatest;
+
   if (scorecards.length === 0) {
+    // No scorecards on file. Two sub-cases:
+    //   1. Truly no data → friendly empty state (original).
+    //   2. Has activity in some other source → "Recent activity" panel +
+    //      still render the existing POD/concessions/CDF/safety sections.
+    if (!hasAnyActivity) {
+      return (
+        <div className="rounded-xl border border-dashed p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            No scorecards yet for {driver.full_name}.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Scorecards land each Sunday once Amazon publishes the prior
+            week. New hires usually show their first one within a week of
+            their first route. Other Performance data (concessions, POD,
+            safety events) appears here too as it comes in.
+          </p>
+        </div>
+      );
+    }
+
     return (
-      <div className="rounded-xl border border-dashed p-10 text-center">
-        <p className="text-sm text-muted-foreground">
-          No scorecards yet for {driver.full_name}.
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Upload a weekly scorecard PDF or DSP Overview CSV on the{" "}
-          <a href="/import" className="underline-offset-4 hover:underline">
-            Import
-          </a>{" "}
-          page.
-        </p>
+      <div className="space-y-4">
+        <section className="rounded-xl border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-medium">Recent activity</h3>
+            <span className="text-xs text-muted-foreground">
+              no scorecard yet
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {driver.full_name} doesn&apos;t have a scorecard on file, but
+            we&apos;ve seen activity from other sources. First scorecard
+            lands the Sunday after Amazon publishes the prior week.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm pt-1">
+            <Stat
+              label="Concessions"
+              value={concessions.length}
+              hint={concDsbCount > 0 ? `${concDsbCount} DSB` : undefined}
+            />
+            <Stat label="Negative CDF" value={cdfRows.length} />
+            <Stat
+              label="Safety events"
+              value={safetyEventTotal}
+              hint={
+                safetyImpactingTotal > 0
+                  ? `${safetyImpactingTotal} impacting`
+                  : undefined
+              }
+            />
+            <Stat
+              label="POD rejects"
+              value={podLatest?.rejects ?? 0}
+              hint={
+                podLatest
+                  ? `wk ${amazonWeekFromEndingDate(podLatest.week_ending).week}`
+                  : undefined
+              }
+            />
+          </div>
+        </section>
+
+        {/* Reuse the existing per-section cards. They self-hide when empty. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+          {podLatest && podLatest.rejects > 0 && (
+            <PodCard
+              podLatest={podLatest}
+              podBreakdown={podBreakdown}
+            />
+          )}
+          {concessions.length > 0 && (
+            <ConcessionsCard
+              total={concessions.length}
+              dsbCount={concDsbCount}
+              typeBreakdown={concTypeBreakdown}
+            />
+          )}
+          {cdfRows.length > 0 && (
+            <CdfCard groups={cdfGroups} totalRows={cdfRows.length} />
+          )}
+        </div>
       </div>
     );
   }
@@ -233,126 +320,190 @@ export default async function DriverPerformancePage({ params }: Props) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
-      {podLatest && podLatest.rejects > 0 && (
-        <section className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium">POD reject breakdown</h3>
-            <span className="text-xs text-muted-foreground">
-              Week {amazonWeekFromEndingDate(podLatest.week_ending).week},{" "}
-              {amazonWeekFromEndingDate(podLatest.week_ending).year}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground">Opportunities</div>
-              <div className="tabular-nums">{podLatest.opportunities}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Success</div>
-              <div className="tabular-nums">{podLatest.success}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Rejects</div>
-              <div className="tabular-nums text-rose-700 dark:text-rose-400">
-                {podLatest.rejects}
-              </div>
-            </div>
-          </div>
-          {podBreakdown.length > 0 && (
-            <ul className="space-y-1 text-sm border-t pt-2">
-              {podBreakdown.map((c) => (
-                <li
-                  key={c.label}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <span className="text-foreground/80">{c.label}</span>
-                  <span className="tabular-nums">{c.count}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {concessions.length > 0 && (
-        <section className="rounded-xl border bg-card p-4 space-y-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium">Concessions</h3>
-            <span className="text-xs text-muted-foreground">
-              all weeks on file
-            </span>
-          </div>
-          <div className="grid grid-cols-2 text-sm">
-            <div>
-              <div className="text-xs text-muted-foreground">Total</div>
-              <div className="tabular-nums">{concessions.length}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">
-                Impacts DSB
-              </div>
-              <div className="tabular-nums text-rose-700 dark:text-rose-400">
-                {concDsbCount}
-              </div>
-            </div>
-          </div>
-          {concTypeBreakdown.length > 0 && (
-            <ul className="space-y-1 text-sm border-t pt-2">
-              {concTypeBreakdown.map((c) => (
-                <li
-                  key={c.label}
-                  className="flex items-baseline justify-between gap-3"
-                >
-                  <span className="text-foreground/80">{c.label}</span>
-                  <span className="tabular-nums">{c.count}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {cdfRows.length > 0 && (
-        <section className="rounded-xl border bg-card p-4 space-y-4 md:col-span-2">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-sm font-medium">
-              Negative Customer Delivery Feedback
-            </h3>
-            <span className="text-xs text-muted-foreground">
-              {cdfRows.length} {cdfRows.length === 1 ? "row" : "rows"} on file
-            </span>
-          </div>
-          <div className="space-y-4 border-t pt-3">
-            {cdfGroups.map((g) => (
-              <div key={g.type} className="space-y-1">
-                <h4 className="text-sm font-medium flex items-baseline gap-2">
-                  <span>{g.type}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    ({g.items.length})
-                  </span>
-                </h4>
-                <ul className="text-xs divide-y">
-                  {g.items.map((item) => (
-                    <li
-                      key={`${g.type}-${item.id}`}
-                      className="flex items-baseline justify-between gap-3 py-1 pl-3"
-                    >
-                      <code className="font-mono">{item.tracking_id}</code>
-                      <time
-                        dateTime={item.date}
-                        className="text-muted-foreground tabular-nums"
-                      >
-                        {formatSessionDate(item.date.slice(0, 10))}
-                      </time>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+        {podLatest && podLatest.rejects > 0 && (
+          <PodCard podLatest={podLatest} podBreakdown={podBreakdown} />
+        )}
+        {concessions.length > 0 && (
+          <ConcessionsCard
+            total={concessions.length}
+            dsbCount={concDsbCount}
+            typeBreakdown={concTypeBreakdown}
+          />
+        )}
+        {cdfRows.length > 0 && (
+          <CdfCard groups={cdfGroups} totalRows={cdfRows.length} />
+        )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helper components — shared between the main render and the no-scorecard
+// "Recent activity" fallback.
+// ---------------------------------------------------------------------------
+
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number | string;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="tabular-nums text-lg">{value}</div>
+      {hint && (
+        <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>
+      )}
+    </div>
+  );
+}
+
+function PodCard({
+  podLatest,
+  podBreakdown,
+}: {
+  podLatest: NonNullable<Awaited<ReturnType<typeof getLatestPodDetails>>>;
+  podBreakdown: { label: string; count: number }[];
+}) {
+  return (
+    <section className="rounded-xl border bg-card p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-medium">POD reject breakdown</h3>
+        <span className="text-xs text-muted-foreground">
+          Week {amazonWeekFromEndingDate(podLatest.week_ending).week},{" "}
+          {amazonWeekFromEndingDate(podLatest.week_ending).year}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Opportunities</div>
+          <div className="tabular-nums">{podLatest.opportunities}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Success</div>
+          <div className="tabular-nums">{podLatest.success}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Rejects</div>
+          <div className="tabular-nums text-rose-700 dark:text-rose-400">
+            {podLatest.rejects}
+          </div>
+        </div>
+      </div>
+      {podBreakdown.length > 0 && (
+        <ul className="space-y-1 text-sm border-t pt-2">
+          {podBreakdown.map((c) => (
+            <li
+              key={c.label}
+              className="flex items-baseline justify-between gap-3"
+            >
+              <span className="text-foreground/80">{c.label}</span>
+              <span className="tabular-nums">{c.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ConcessionsCard({
+  total,
+  dsbCount,
+  typeBreakdown,
+}: {
+  total: number;
+  dsbCount: number;
+  typeBreakdown: { label: string; count: number }[];
+}) {
+  return (
+    <section className="rounded-xl border bg-card p-4 space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-medium">Concessions</h3>
+        <span className="text-xs text-muted-foreground">all weeks on file</span>
+      </div>
+      <div className="grid grid-cols-2 text-sm">
+        <div>
+          <div className="text-xs text-muted-foreground">Total</div>
+          <div className="tabular-nums">{total}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground">Impacts DSB</div>
+          <div className="tabular-nums text-rose-700 dark:text-rose-400">
+            {dsbCount}
+          </div>
+        </div>
+      </div>
+      {typeBreakdown.length > 0 && (
+        <ul className="space-y-1 text-sm border-t pt-2">
+          {typeBreakdown.map((c) => (
+            <li
+              key={c.label}
+              className="flex items-baseline justify-between gap-3"
+            >
+              <span className="text-foreground/80">{c.label}</span>
+              <span className="tabular-nums">{c.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function CdfCard({
+  groups,
+  totalRows,
+}: {
+  groups: {
+    type: string;
+    items: { id: string; tracking_id: string; date: string }[];
+  }[];
+  totalRows: number;
+}) {
+  return (
+    <section className="rounded-xl border bg-card p-4 space-y-4 md:col-span-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-medium">
+          Negative Customer Delivery Feedback
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          {totalRows} {totalRows === 1 ? "row" : "rows"} on file
+        </span>
+      </div>
+      <div className="space-y-4 border-t pt-3">
+        {groups.map((g) => (
+          <div key={g.type} className="space-y-1">
+            <h4 className="text-sm font-medium flex items-baseline gap-2">
+              <span>{g.type}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                ({g.items.length})
+              </span>
+            </h4>
+            <ul className="text-xs divide-y">
+              {g.items.map((item) => (
+                <li
+                  key={`${g.type}-${item.id}`}
+                  className="flex items-baseline justify-between gap-3 py-1 pl-3"
+                >
+                  <code className="font-mono">{item.tracking_id}</code>
+                  <time
+                    dateTime={item.date}
+                    className="text-muted-foreground tabular-nums"
+                  >
+                    {formatSessionDate(item.date.slice(0, 10))}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
