@@ -280,6 +280,18 @@ function RegistrationRoster({ vehicles }: { vehicles: VehicleListItem[] }) {
     );
   }
 
+  // Split into "needs attention" (≤60 days or already expired) — always
+  // visible — and "rest" (>60 days) — hidden behind a <details> toggle
+  // so the dashboard isn't dominated by months-out renewals.
+  const upcoming = sorted.filter((v) => {
+    const d = daysUntilExpiry(v.registration_expiry_date);
+    return d !== null && d <= 60;
+  });
+  const rest = sorted.filter((v) => {
+    const d = daysUntilExpiry(v.registration_expiry_date);
+    return d !== null && d > 60;
+  });
+
   return (
     <section className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
@@ -291,65 +303,94 @@ function RegistrationRoster({ vehicles }: { vehicles: VehicleListItem[] }) {
           All vans <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs uppercase tracking-wider text-muted-foreground text-left border-b">
-              <th className="py-2 pr-3 font-normal">Vehicle</th>
-              <th className="py-2 pr-3 font-normal">State</th>
-              <th className="py-2 pr-3 font-normal">Expires</th>
-              <th className="py-2 font-normal">Days</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {sorted.map((v) => {
-              const days = daysUntilExpiry(v.registration_expiry_date) ?? 0;
-              const chip =
-                days < 30
-                  ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
-                  : days < 60
-                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
-                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200";
-              return (
-                <tr key={v.id}>
-                  <td className="py-2 pr-3">
-                    <Link
-                      href={`/fleet/vans/${v.vin}`}
-                      className="hover:underline font-medium"
-                    >
-                      {v.vehicle_name || v.vin}
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-3 text-muted-foreground">
-                    {v.registered_state ?? "—"}
-                  </td>
-                  <td className="py-2 pr-3 tabular-nums">
-                    {v.registration_expiry_date
-                      ? format(
-                          parseISO(v.registration_expiry_date),
-                          "MMM d, yyyy",
-                        )
-                      : "—"}
-                  </td>
-                  <td className="py-2">
-                    <span
-                      className={cn(
-                        "text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5",
-                        chip,
-                      )}
-                    >
-                      {days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
-                    </span>
-                    {days < 0 && (
-                      <AlertTriangle className="inline-block h-3 w-3 ml-1 text-red-600" />
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+
+      {upcoming.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-2 mb-2">
+          ✓ No registrations due in the next 60 days.
+        </p>
+      ) : (
+        <RosterTable vehicles={upcoming} />
+      )}
+
+      {rest.length > 0 && (
+        <details className="mt-3 group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none">
+            <span className="group-open:hidden">
+              Show {rest.length} more (60+ days out)
+            </span>
+            <span className="hidden group-open:inline">
+              Hide {rest.length} more
+            </span>
+          </summary>
+          <div className="mt-2">
+            <RosterTable vehicles={rest} />
+          </div>
+        </details>
+      )}
     </section>
+  );
+}
+
+function RosterTable({ vehicles }: { vehicles: VehicleListItem[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs uppercase tracking-wider text-muted-foreground text-left border-b">
+            <th className="py-2 pr-3 font-normal">Vehicle</th>
+            <th className="py-2 pr-3 font-normal">State</th>
+            <th className="py-2 pr-3 font-normal">Expires</th>
+            <th className="py-2 font-normal">Days</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {vehicles.map((v) => {
+            const days = daysUntilExpiry(v.registration_expiry_date) ?? 0;
+            const chip =
+              days < 30
+                ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200"
+                : days < 60
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200";
+            return (
+              <tr key={v.id}>
+                <td className="py-2 pr-3">
+                  <Link
+                    href={`/fleet/vans/${v.vin}`}
+                    className="hover:underline font-medium"
+                  >
+                    {v.vehicle_name || v.vin}
+                  </Link>
+                </td>
+                <td className="py-2 pr-3 text-muted-foreground">
+                  {v.registered_state ?? "—"}
+                </td>
+                <td className="py-2 pr-3 tabular-nums">
+                  {v.registration_expiry_date
+                    ? format(
+                        parseISO(v.registration_expiry_date),
+                        "MMM d, yyyy",
+                      )
+                    : "—"}
+                </td>
+                <td className="py-2">
+                  <span
+                    className={cn(
+                      "text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5",
+                      chip,
+                    )}
+                  >
+                    {days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}
+                  </span>
+                  {days < 0 && (
+                    <AlertTriangle className="inline-block h-3 w-3 ml-1 text-red-600" />
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
