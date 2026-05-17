@@ -1,17 +1,28 @@
 import { requireUser } from "@/lib/auth/require-role";
 import { listDrivers } from "@/lib/queries/drivers";
+import { isManagement } from "@/lib/types/database";
 import { DriversTable } from "@/components/app/drivers-table";
 
 export default async function DriversPage() {
-  await requireUser();
+  const me = await requireUser();
   const drivers = await listDrivers();
+  const canManage = isManagement(me.role);
+
+  const driverCount = drivers.filter((d) => d.position === "driver").length;
+  const helperCount = drivers.filter((d) => d.position === "helper").length;
 
   return (
     <div className="space-y-4">
       <div className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Drivers</h1>
         <p className="text-sm text-muted-foreground">
-          {drivers.length} {drivers.length === 1 ? "driver" : "drivers"}
+          {driverCount} {driverCount === 1 ? "driver" : "drivers"}
+          {helperCount > 0 && (
+            <>
+              {" · "}
+              {helperCount} {helperCount === 1 ? "helper" : "helpers"}
+            </>
+          )}
         </p>
       </div>
 
@@ -22,7 +33,7 @@ export default async function DriversPage() {
           Supabase SQL editor to load the initial roster.
         </div>
       ) : (
-        <DriversTable drivers={drivers} />
+        <DriversTable drivers={drivers} canManage={canManage} />
       )}
     </div>
   );

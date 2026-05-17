@@ -28,8 +28,10 @@ to-end.
   defaults to Quality). Each view: 4 stat tiles, company trend chart,
   3 leaderboards, full-width Needs Coaching hero, two donuts.
 - Management page with dispatcher↔driver FK picker
-- Employees page (admin CRUD for drivers + helpers) — **likely to be
-  merged into the Drivers page in a near-term pass; see §6.**
+- Drivers list is the unified roster (drivers + helpers). Management
+  sees Add driver / Add helper / inline Edit; dispatchers see read-only.
+  There is no separate Employees admin page — that was merged into
+  /drivers on 2026-05-17.
 - **Fleet dashboard** at `/fleet` with 4 tiles (Operational, Grounded,
   Reg expiring, Open issues), "In the shop" hero grouped by shop
   location, Open issues hero, collapsible registration roster, and a
@@ -212,10 +214,6 @@ Plus all prior migrations from previous HANDOFF.
 ## 6. Open / deferred / out-of-scope
 
 ### Open (small / nice-to-have)
-- **Merge `/admin/employees` into `/drivers`** — proposed by user at end
-  of 2026-05-17 session. Idea: one Drivers page, with management-only
-  Add / Edit affordances. Sidebar drops the Employees entry. Discussion
-  pending; not yet implemented. See "Discussion notes" below.
 - **Per-period tracking on `file_imports`** (was Pass 8). Would add
   `period_start` / `period_end` for audit trail. Low priority — donut
   alignment no longer needs it.
@@ -246,23 +244,6 @@ Plus all prior migrations from previous HANDOFF.
   Continue manual / email-attachment uploads unless a safer path
   emerges (e.g. Netradyne enterprise API).
 
-### Discussion notes — Employees → Drivers merge proposal
-User noted that the Employees admin page and the Drivers list duplicate
-nearly all surface — same roster, with Employees adding edit/create
-affordances. Proposal: collapse to one Drivers page, gate edit/create
-behind `is_management()` so dispatchers see read-only, owners/HR/ops_
-managers see Add Driver / Add Helper / inline Edit.
-
-Open questions to settle before building:
-1. Helpers are `position='helper'` on the same `drivers` table. Do
-   they appear in the unified list by default, behind a filter chip,
-   or stay segregated?
-2. Does the driver detail page (multi-tab profile) work for helpers,
-   or does it need a stripped-down view? (Helpers have no scorecards /
-   safety events / coaching.)
-3. Sidebar entry for Employees presumably goes away. Anyone navigating
-   there directly hits a 404 / redirect to /drivers?
-
 ## 7. Folder structure (current)
 
 ```
@@ -271,11 +252,10 @@ Open questions to settle before building:
 ├── app/
 │   ├── (app)/
 │   │   ├── admin/
-│   │   │   ├── employees/         # CRUD for drivers + helpers (merge candidate)
 │   │   │   └── users/             # Management page (dispatcher↔driver picker)
 │   │   ├── drivers/
 │   │   │   ├── [id]/              # Driver detail (layout + 4 tabs)
-│   │   │   └── page.tsx           # Drivers list (Last Coached column)
+│   │   │   └── page.tsx           # Unified Drivers + Helpers list; mgmt-only Edit/Add
 │   │   ├── fleet/
 │   │   │   ├── page.tsx           # Fleet dashboard (tiles + heroes + roster + PAVE)
 │   │   │   ├── vans/page.tsx      # Vehicles list
@@ -291,7 +271,7 @@ Open questions to settle before building:
 │   └── layout.tsx
 ├── components/
 │   ├── app/
-│   │   ├── admin/                 # users-table + drivers-admin
+│   │   ├── admin/                 # users-table (Management page)
 │   │   ├── coaching/              # log/edit/void dialog, session card+list, triggers panel
 │   │   ├── dashboard/             # view-toggle, threshold-tile, leaderboards,
 │   │   │                          # needs-coaching-list, donuts, trend charts, stat-tile

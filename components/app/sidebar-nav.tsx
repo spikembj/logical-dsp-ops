@@ -7,7 +7,6 @@ import {
   Users,
   Upload,
   ShieldUser,
-  UserCog,
   Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,7 +28,6 @@ const NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin/users", label: "Management", icon: ShieldUser },
-  { href: "/admin/employees", label: "Employees", icon: UserCog },
 ];
 
 export function SidebarNav({ role }: { role: UserRole }) {

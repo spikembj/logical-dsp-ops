@@ -343,12 +343,14 @@ Two donut charts: **Negative CDF** (feedback types from `cdf_negative` rows in t
 Renders below the leaderboards on both views. Content is filtered to whichever view is active — no more in-list Safety/Quality toggle (the dashboard-level toggle handles it). Per-row inline `Log session` button pre-fills the dialog with the view's trigger context.
 
 ### 3. Drivers list (`/drivers`)
-Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.
+Searchable, sortable table. Columns: Name (with **Helper** badge when applicable) / Transporter ID / Status / Current Tier / Score / Last Coached / Approved Vehicles. Status filter chips (All / Active / LOA / Inactive / Terminated) and Position filter chips (**Drivers** [default] / Helpers / All). Last Coached shows the most recent **non-voided** session as a relative time ("3 days ago") with the absolute date in a tooltip.
+
+**Management-only affordances** (RLS gates writes; UI gates rendering by `isManagement(role)`): two **Add** buttons in the header (Add driver / Add helper) and an inline Edit icon in the last column of every row. Dispatchers see the same table without those affordances. There is no separate Employees admin page — this is the unified surface.
 
 ### 4. Driver detail (`/drivers/[id]`)
 Tabbed: Profile / Performance / Safety events / Coaching. Header strip: name, **Helper** badge if position=helper, status badge, tier badge (from latest scorecard), overall score, last coached (relative time with absolute date in tooltip; — when never coached).
 
-- **Profile:** read-only fields including Position. Editing happens via `/admin/employees`.
+- **Profile:** read-only fields including Position. Editing happens via the per-row Edit button on `/drivers` (management only).
 - **Performance:** Recharts trend chart (last 12 weeks of Overall / DCR / POD with toggleable series; FICO is captured in scorecards but intentionally not charted) at the top, followed by the wide metrics table grouped as Standing (Tier + Score) | Volume (Delivered) | Safety | Delivery Quality. Negative CDF summary card groups TBAs **by feedback type** (a TBA appears under every type it was flagged for), each TBA shown with its delivery date for easy lookup during coaching. Below the table: summary cards for **POD reject breakdown** (when latest week has rejects), **Concessions** (totals + DSB-impacting count + per-defect-type breakdown), and **Negative Customer Delivery Feedback** (per-type breakdown + full TBA + date list).
 - **Safety events:** filterable list (default: last 30 days, impacting only). Toggle to show non-impacting.
 - **Coaching:** Triggers panel (Safety / Quality / Escalations) above the chronological session history. Each session shows session_type badge, coach, ack toggle. Edit / Void buttons (management only). "Show N voided" toggle when voided sessions exist.
@@ -380,10 +382,7 @@ Driver matching (for all imports): by `transporter_id` when available, fallback 
 ### 7. Management (`/admin/users`)
 Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout. **Driver record column** links a user to a `drivers` row when they also drive routes (e.g. dispatchers who run occasional shifts) — linked rows show the driver's name as a clickable link to the driver profile, with a small unlink button next to it. Unlinked rows show a "Link…" picker dialog that searches active, not-yet-linked drivers. One-to-one enforced by a partial unique index on `users.driver_id`.
 
-### 8. Employees (`/admin/employees`)
-Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision with the public-facing Drivers list). Searchable + status-filterable list with per-row Edit dialog and Add employee dialog at the top. Covers both drivers and helpers — Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
-
-### 9. Fleet dashboard (`/fleet`)
+### 8. Fleet dashboard (`/fleet`)
 Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickable threshold tiles with popovers, hero lists, "no guesswork" surfaces). Scope is intentionally narrow — Amazon already owns PMs / DVIC / AVI / DOT / odometer defects / warning lights, and we do not duplicate any of it. This dashboard exists to fill the gaps Amazon's dashboard leaves: shop location, registration expiry warnings, our own minor-issue tracker, and parts-on-order visibility.
 
 **Header:** `Fleet — {N} vehicles · {N} operational · {N} grounded`
@@ -400,14 +399,14 @@ Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickab
 
 **Registration roster** — sortable table, defaults to ascending `registration_expiry_date`. Red chip for expired or <30 days, yellow for 30–60 days, green for >60 days. Click a row to jump to the van detail page.
 
-### 10. Vehicle list (`/fleet/vans`)
+### 9. Vehicle list (`/fleet/vans`)
 Searchable, sortable table. Columns: **Name / VIN / Plate / Make+Model / Service tier / Operational status** (with a small "manual" pill if `operational_status_source='manual'`) **/ Current shop / EOD location / Open issues count / Reg expiry**.
 
 Filter chips: All / Operational / Grounded / In shop / Has open issues / Reg expiring soon.
 
 Per-row click: link to detail page. Inline QR icon: opens the QR modal directly from the list without leaving the page.
 
-### 11. Vehicle detail (`/fleet/vans/[vin]`)
+### 10. Vehicle detail (`/fleet/vans/[vin]`)
 Header strip: van name, license plate, operational status badge (with manual-override pill + tooltip showing the manual note when source=manual), ownership chip (Owned / Rental / Leased), service tier. A **QR** button in the header opens a modal with a large SVG QR (encoding the plain VIN text), plus Print and Download SVG actions.
 
 Tabs:
@@ -416,7 +415,7 @@ Tabs:
 - **Parts** — chronological list. "Order part" button. Per-row quantity ledger (ordered / received / installed). Optional link badge to the issue the part is for. Per-row inline `Receive`, `Install`, `Return` actions update the matching quantities (and derive the new `status`). Filter: Open (needed/ordered/partial) / All.
 - **History** — derived audit trail: registration-expiry changes, operational-status flips (with source), import touches, manual edits to local fields. Built from a simple `vehicle_history` table populated by triggers. Low priority — defer to a polish pass if it slips.
 
-### 12. Fleet QR sheet (`/fleet/qr-sheet`)
+### 11. Fleet QR sheet (`/fleet/qr-sheet`)
 Printable label sheet. Renders every active van as a grid of QRs (4 per row by default), each labeled with the van's nickname and VIN beneath the code. CSS print styles tuned for letter-size paper so it lays out cleanly through the browser's print dialog. Per-vehicle "include" checkbox in the on-screen view so you can print just a subset (e.g. only newly-added vans, or only vans missing their lot label).
 
 QR encodes the plain VIN text — no URL — so it's directly compatible with Amazon's delivery-app VIN entry and any other barcode scanner that expects VIN-as-text.
