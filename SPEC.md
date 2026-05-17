@@ -38,6 +38,8 @@ Long-term vision: a single tool that owns roster, performance, attendance, fleet
 | CSV parsing | PapaParse | Battle-tested |
 | PDF parsing | pdfjs-dist (legacy/Node build) + `@napi-rs/canvas` polyfill | Legacy build runs in Node; the canvas package provides `DOMMatrix`/`Path2D`/`ImageData` on Vercel's stricter Node runtime (see `lib/parsing/pdfjs-node-polyfill.ts`). Both packages are `serverExternalPackages`. |
 | Charts | Recharts | Multi-line trend chart, shared by the per-driver Performance tab and the home Performance dashboard's company-wide trend (last 12 weeks: Overall / DCR / POD) |
+| Excel parsing | SheetJS (`xlsx`) | Parses Amazon's Vehicles xlsx export (the one file Amazon doesn't let us download as CSV) |
+| QR codes | `qrcode` | Server-side SVG generation for per-van VIN labels used in the delivery app and around the lot |
 | Hosting | Vercel | Free tier, zero-config Next.js deploys |
 
 > **Cost path:** $0 to start → ~$25/mo (Supabase Pro) → ~$45/mo (Vercel Pro) if needed.
@@ -189,6 +191,68 @@ Unique on (`driver_id`, `tracking_id`); re-imports upsert.
 
 Unique on (`driver_id`, `week_ending`); re-imports upsert.
 
+### `vehicles`
+**One row per van.** Seeded from Amazon's Vehicles xlsx export, upserted by VIN. The schema deliberately separates Amazon-managed columns from locally-managed columns — re-imports overwrite the Amazon side and leave our side untouched.
+
+**Identity:**
+- `id` (uuid, PK), `vin` (text, unique, not null) — VIN is the natural key for matching against the Amazon export, `id` is the FK target everywhere else.
+
+**Amazon-managed columns** (overwritten by every import):
+- `vehicle_name` (text) — human nickname like "VAN 20" / "CDV4" / "R4373 - LMR"
+- `license_plate` (text, nullable)
+- `make`, `model`, `sub_model`, `year` (text/text/text/int)
+- `service_type` (text) — Amazon's verbose label, e.g. "Standard Parcel Electric - Rivian MEDIUM"
+- `service_tier` (text) — Amazon's enum-ish code, e.g. `ELECTRIC_RPV_MEDIUM`
+- `ownership_type` (enum: `amazon_owned / amazon_rental / amazon_leased`)
+- `vehicle_provider` (text, nullable) — fleet management partner (`ELEMENT` / `LP`)
+- `registration_expiry_date` (date, nullable) — present in Amazon's file but absent from Amazon's dashboard; surfaces directly on `/fleet` so registrations don't lapse silently
+- `registered_state` (text, nullable)
+- `station_code` (text) — `DUT4` / `DUT7`
+- `raw_data` (jsonb) — full Amazon row, future-proofing against new columns
+- `imported_from` (FK → file_imports, nullable)
+
+**Operational status (override-aware):**
+- `operational_status` (enum: `operational / grounded / ready_for_audit`) — current effective status, the value the dashboard and lists read
+- `operational_status_source` (enum: `amazon / manual`, default `amazon`)
+- `operational_status_changed_at` (timestamptz), `operational_status_changed_by` (uuid → users.id, nullable)
+- `status_reason_message` (text, nullable) — Amazon's reason text, preserved even when a manual override is active so the UI can show "Amazon currently reports …"
+- `manual_status_note` (text, nullable) — your reason when overriding
+
+> **Re-import merge rule:** if `operational_status_source = 'amazon'`, overwrite the status normally. If `source = 'manual'`, leave the status alone but still update `raw_data` so the van detail page can render "Amazon currently reports OPERATIONAL — clear override?" The override clears when you click "Use Amazon's value," which sets source back to `amazon` and applies the latest imported value.
+
+**Locally-managed columns** (untouched by imports):
+- `current_shop_location` (text, nullable) — which shop the van is at right now
+- `eod_parking_location` (text, nullable) — where it parks overnight on the lot
+- `notes` (text, nullable)
+- `created_at`, `updated_at`
+
+### `vehicle_issues`
+**One row per damage / issue / quirk we want to track.** Supplements (does not replace) Amazon's own issue tracker — scope is the small dents, minor mechanical things, and watch-list items Amazon doesn't ground for.
+- `id` (uuid, PK), `vehicle_id` (FK → vehicles.id)
+- `reported_at` (timestamptz, default now), `reported_by` (uuid → users.id, nullable)
+- `category` (enum: `damage / mechanical / electrical / cosmetic / tires / other`)
+- `severity` (enum: `minor / moderate / major / out_of_service`)
+- `description` (text)
+- `status` (enum: `open / in_shop / fixed / closed_no_repair`, default `open`)
+- `resolved_at` (timestamptz, nullable), `resolution_notes` (text, nullable)
+- `auto_created` (bool, default `false`) — `true` when created by the grounding-detection trigger on import
+- `photo_urls` (jsonb, default `[]`) — empty in Phase 2; populated in Phase 3 (driver-facing VCR + photo damage detection)
+- `created_at`, `updated_at`
+
+> **Auto-issue on grounding:** when a vehicles import flips a van from `operational` → `grounded` / `ready_for_audit`, a row is auto-created with `category='other'`, `severity='out_of_service'`, `auto_created=true`, and `description='Auto-created: Amazon grounded — {status_reason_message or "no reason given"}'`. The matching auto-row auto-closes when a later import flips the van back to `operational`. Manual issues are never auto-closed.
+
+### `vehicle_parts`
+**One row per part order.** Quantity-tracked so multi-unit orders ("3 brake pads for VAN 17") are a single row, not three.
+- `id`, `vehicle_id` (FK → vehicles.id)
+- `issue_id` (FK → vehicle_issues.id, **nullable**) — optional link to the issue the part is for; left null when stocking extras or pre-ordering
+- `part_name` (text), `part_number` (text, nullable)
+- `quantity_ordered`, `quantity_received`, `quantity_installed` (int, default `0`)
+- `status` (enum: `needed / ordered / partial / received / installed / returned`) — derivable from the quantities except for `returned`, so stored explicitly
+- `vendor` (text, nullable), `cost` (numeric, nullable)
+- `ordered_at`, `received_at` (timestamptz, nullable)
+- `notes` (text, nullable)
+- `created_at`, `updated_at`
+
 ## Helper SQL functions
 
 - `current_user_role()` (security definer) — reads caller's role for use in RLS.
@@ -198,6 +262,7 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `log_coaching_session_revision()` — trigger on `coaching_sessions` UPDATE.
 - `set_coaching_acknowledged(uuid, boolean)` (security definer, granted to authenticated) — lets dispatchers flip the acknowledged toggle without write access to the rest of the row.
 - `refresh_driver_active_status()` (security definer, returns activated_count + deactivated_count) — bidirectional: drivers with no recent activity in 60 days flip from `active` → `inactive`; drivers who reappear in scorecards/events flip back. Called automatically at the end of every import action.
+- `apply_vehicle_grounding_changes()` — called by the vehicles import after upserts land. For each van whose Amazon status flipped `operational` → `grounded`/`ready_for_audit`, create an auto-issue (if no open auto-issue exists). For each van that flipped back to `operational`, auto-close any open auto-issue. Manual-source rows are skipped entirely. Returns `(grounded_count, ungrounded_count)`.
 
 ## Coaching Triggers (who needs coaching)
 
@@ -286,7 +351,7 @@ Date, **type dropdown** (Discussion / Verbal warning / Write up / Final warning 
 **Per-category clearing:** the dashboard needs-coaching lists and the per-driver Triggers panel both filter their content by category. Saving a Safety-category session clears the safety trigger for that driver in the 7-day window but leaves any quality trigger intact (and vice versa). `'other'` sessions don't clear anything. Triggers naturally re-surface when the window advances past the session, or when fresh data arrives (new safety events, new scorecard).
 
 ### 6. Import (`/import`)
-Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.
+Eight tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","manager"])` (management only). All share a window-level drop-guard so a stray drop outside the dashed area can't navigate the browser to the file.
 - **DSP Overview (CSV)** — *primary scorecard source going forward.* Per-driver tier + overall_score + every metric.
 - **Scorecard (PDF)** — fallback when the CSV isn't available; same destination table.
 - **Netradyne (CSV)** — aggregated event counts; wipe-and-replace by (`source`, `event_date`). **Does not auto-create drivers** — names not already in the `drivers` table are skipped, because Netradyne camera accounts often span multiple physical DSP locations under one org (e.g. DUT4 + DUT7). A driver joins this DSP only when they appear in a station-specific source below. When the strict name lookup misses, a **fuzzy fallback** runs (first-name prefix, common-nickname dictionary, extra-last-name token) — handles the case where Netradyne uses a driver's legal name and Amazon uses what they entered. Fuzzy matches are surfaced in the import result for human review and logged to `file_imports.errors` with the reason. Helpers are excluded from the fuzzy candidate pool.
@@ -294,14 +359,53 @@ Seven tabs, each backed by `requireRole(["owner","hr","ops_manager","admin","man
 - **Concessions (CSV)** — per-package delivery defects.
 - **CDF Negative (CSV)** — per-package customer feedback (handles daily and weekly exports).
 - **POD Details (PDF)** — photo-on-delivery acceptance breakdown by reject reason. Year falls back to filename when missing in PDF text.
+- **Vehicles (XLSX)** — Amazon's Vehicles export. Upserts by VIN. Amazon-managed columns overwrite; locally-managed columns and `operational_status_source='manual'` rows are preserved (see `vehicles` table notes). Triggers grounding-issue auto-create/auto-close (see `apply_vehicle_grounding_changes()`). Drivers are not touched by this import — different domain.
 
-Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows **for all imports except Netradyne** (see above).
+Result card shows match counts and any errors. Driver matching: by transporter_id when available, fallback to normalized full_name. Unmatched names auto-create driver rows **for all imports except Netradyne and Vehicles** (Netradyne for the two-DSP reasons above; Vehicles because it's a different domain — vans, not people).
 
 ### 7. Management (`/admin/users`)
 Sidebar label is **Management**. Owner-tier admins invite teammates by email (Supabase auth `inviteUserByEmail`), set roles (Owner / HR / Ops Manager / Dispatcher), deactivate. Self-row's role + active controls are disabled to prevent self-lockout. **Driver record column** links a user to a `drivers` row when they also drive routes (e.g. dispatchers who run occasional shifts) — linked rows show the driver's name as a clickable link to the driver profile, with a small unlink button next to it. Unlinked rows show a "Link…" picker dialog that searches active, not-yet-linked drivers. One-to-one enforced by a partial unique index on `users.driver_id`.
 
 ### 8. Employees (`/admin/employees`)
 Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision with the public-facing Drivers list). Searchable + status-filterable list with per-row Edit dialog and Add employee dialog at the top. Covers both drivers and helpers — Edit covers every field including position (Driver / Helper) and approved vehicle types (vehicles hidden when position=helper).
+
+### 9. Fleet dashboard (`/fleet`)
+Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickable threshold tiles with popovers, hero lists, "no guesswork" surfaces). Scope is intentionally narrow — Amazon already owns PMs / DVIC / AVI / DOT / odometer defects / warning lights, and we do not duplicate any of it. This dashboard exists to fill the gaps Amazon's dashboard leaves: shop location, registration expiry warnings, our own minor-issue tracker, and parts-on-order visibility.
+
+**Header:** `Fleet — {N} vehicles · {N} operational · {N} grounded`
+
+**4 stat tiles**, each clickable to a dialog listing the matching vans:
+- **Operational** — count of vans with effective status `operational`.
+- **Grounded** — count of `grounded` + `ready_for_audit`.
+- **Registration expiring** — count expiring in next 60 days (already-expired included).
+- **Open issues** — distinct vans with any `vehicle_issues.status` in (`open`, `in_shop`).
+
+**Hero lists:**
+- **In the shop** — grouped by `current_shop_location`, with per-shop van count and a chevron to expand the list. Vans with no shop set don't appear here.
+- **Open issues** — most recent first, grouped by van. Severity badge per row. Per-row inline `Resolve` action (opens the issue dialog in resolve mode).
+
+**Registration roster** — sortable table, defaults to ascending `registration_expiry_date`. Red chip for expired or <30 days, yellow for 30–60 days, green for >60 days. Click a row to jump to the van detail page.
+
+### 10. Vehicle list (`/fleet/vans`)
+Searchable, sortable table. Columns: **Name / VIN / Plate / Make+Model / Service tier / Operational status** (with a small "manual" pill if `operational_status_source='manual'`) **/ Current shop / EOD location / Open issues count / Reg expiry**.
+
+Filter chips: All / Operational / Grounded / In shop / Has open issues / Reg expiring soon.
+
+Per-row click: link to detail page. Inline QR icon: opens the QR modal directly from the list without leaving the page.
+
+### 11. Vehicle detail (`/fleet/vans/[vin]`)
+Header strip: van name, license plate, operational status badge (with manual-override pill + tooltip showing the manual note when source=manual), ownership chip (Owned / Rental / Leased), service tier. A **QR** button in the header opens a modal with a large SVG QR (encoding the plain VIN text), plus Print and Download SVG actions.
+
+Tabs:
+- **Overview** — all Amazon-managed fields read-only. Locally-managed fields (`current_shop_location`, `eod_parking_location`, `notes`) editable inline. The operational-status widget is its own card: dropdown to override, optional `manual_status_note` input, and — when the local value differs from Amazon's latest imported value — a callout reading *"Amazon currently reports {operational_status} — use Amazon's value"* with a clear-override button. Setting the dropdown back to Amazon's value (or clicking the callout) flips `operational_status_source` back to `amazon`.
+- **Issues** — chronological list (most recent first). "Log new issue" button at top. Per-row Resolve / Edit / Close-without-repair actions. Auto-created issues show an "Auto" badge so it's clear they came from a grounding event. Filter: Open / In shop / All. `photo_urls` slot is wired but the UI is hidden (Phase 3).
+- **Parts** — chronological list. "Order part" button. Per-row quantity ledger (ordered / received / installed). Optional link badge to the issue the part is for. Per-row inline `Receive`, `Install`, `Return` actions update the matching quantities (and derive the new `status`). Filter: Open (needed/ordered/partial) / All.
+- **History** — derived audit trail: registration-expiry changes, operational-status flips (with source), import touches, manual edits to local fields. Built from a simple `vehicle_history` table populated by triggers. Low priority — defer to a polish pass if it slips.
+
+### 12. Fleet QR sheet (`/fleet/qr-sheet`)
+Printable label sheet. Renders every active van as a grid of QRs (4 per row by default), each labeled with the van's nickname and VIN beneath the code. CSS print styles tuned for letter-size paper so it lays out cleanly through the browser's print dialog. Per-vehicle "include" checkbox in the on-screen view so you can print just a subset (e.g. only newly-added vans, or only vans missing their lot label).
+
+QR encodes the plain VIN text — no URL — so it's directly compatible with Amazon's delivery-app VIN entry and any other barcode scanner that expects VIN-as-text.
 
 ## Build Order
 
@@ -319,6 +423,7 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
 7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Employees page (CRUD with position + standard_parcel rename).
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
+10. 🚧 Phase 2 — **Fleet** (in progress): `vehicles` / `vehicle_issues` / `vehicle_parts` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts / History) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
 
 ## Audit & Data Integrity Rules
 
@@ -336,7 +441,7 @@ Sidebar label is **Employees** (renamed from "Drivers admin" to avoid collision 
 ## Future / Out of Phase 1
 
 The user has flagged these as planned future scope, not part of Phase 1:
-- **More dashboards:** Ops & daily planning, Fleet tracking, HR (onboarding/offboarding). Each will sit at its own `/<dashboard>` route. The current home dashboard is intentionally named **Performance** for that reason.
+- **More dashboards:** Daily Ops (day-of planning, call-outs, van-to-driver assignments), HR (onboarding, document expiry, training certs). Each will sit at its own `/<dashboard>` route. **Fleet** is in progress as Phase 2 (see Build Order item 10). The current home dashboard is intentionally named **Performance** because the app will own several siblings.
 <!-- Dispatcher ↔ driver linkage shipped — see Management page section above. -->
 - (no items pending)
 
@@ -349,9 +454,9 @@ Schema and code support these but the UX hasn't shipped:
 
 ## Out of Scope (Phase 1)
 
-- Vehicle / VCR module (Phase 2)
-- Attendance / call-out tracking (Phase 2)
-- Onboarding & training (Phase 3)
-- Incidents / accidents / damages (Phase 3)
+- Driver-facing VCR submission (Phase 3 — Phase 2 ships manager-tracked issues + parts + QR codes; driver-facing daily inspections + manager photo upload with automatic damage detection are explicitly later)
+- Daily Ops / attendance / call-out tracking / van-to-driver assignments (Phase 2 follow-on — Daily Ops dashboard)
+- Onboarding & training / HR (Phase 3)
+- Incidents / accidents (Phase 3 — `vehicle_issues` covers the operational damage side; full incident reports with insurance + photos are separate)
 - ADP / Slack / Rivian portal integrations
 - Mobile app

@@ -1,0 +1,174 @@
+import "server-only";
+import { cache } from "react";
+import { createClient } from "@/lib/supabase/server";
+import type {
+  VehicleRow,
+  VehicleListItem,
+  VehicleIssueRow,
+  VehicleIssueStatus,
+  VehiclePartRow,
+} from "./fleet-types";
+
+/**
+ * Server-only query helpers for the Fleet dashboard, list, and detail
+ * pages. Phase 2.
+ *
+ * Scope reminder: Amazon owns vehicle health (PMs, DVIC, AVI, DOT,
+ * warning lights, odometer). These queries surface only the gaps we fill
+ * — operational status, registration expiry, our own issues + parts,
+ * shop location.
+ *
+ * Types + pure helpers live in `./fleet-types` so client components can
+ * import them without dragging this server-only module into the bundle.
+ */
+
+// Re-export types + helpers so existing call sites keep working without
+// updating every import.
+export * from "./fleet-types";
+export { daysUntilExpiry } from "./fleet-types";
+
+const OPEN_ISSUE_STATUSES: VehicleIssueStatus[] = ["open", "in_shop"];
+
+/** All vehicles + their open-issue counts, sorted by vehicle_name. */
+export const listVehicles = cache(async (): Promise<VehicleListItem[]> => {
+  const supabase = await createClient();
+  const [vehiclesRes, issuesRes] = await Promise.all([
+    supabase.from("vehicles").select("*").order("vehicle_name"),
+    supabase
+      .from("vehicle_issues")
+      .select("vehicle_id, status")
+      .in("status", OPEN_ISSUE_STATUSES),
+  ]);
+  if (vehiclesRes.error) {
+    console.error("listVehicles failed:", vehiclesRes.error);
+    return [];
+  }
+  const openByVehicle = new Map<string, number>();
+  for (const i of (issuesRes.data ?? []) as { vehicle_id: string }[]) {
+    openByVehicle.set(i.vehicle_id, (openByVehicle.get(i.vehicle_id) ?? 0) + 1);
+  }
+  return ((vehiclesRes.data ?? []) as VehicleRow[]).map((v) => ({
+    ...v,
+    open_issues_count: openByVehicle.get(v.id) ?? 0,
+  }));
+});
+
+export interface FleetDashboardData {
+  vehicles: VehicleListItem[];
+  totals: {
+    total: number;
+    operational: number;
+    grounded: number;
+    registration_expiring: number;
+    open_issues_distinct_vehicles: number;
+  };
+  byShop: Map<string, VehicleListItem[]>;
+  openIssues: (VehicleIssueRow & { vehicle: VehicleListItem })[];
+}
+
+const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
+export const getFleetDashboardData = cache(
+  async (): Promise<FleetDashboardData> => {
+    const supabase = await createClient();
+    const vehicles = await listVehicles();
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const sixtyOut = new Date(today.getTime() + SIXTY_DAYS_MS);
+
+    const totals = {
+      total: vehicles.length,
+      operational: 0,
+      grounded: 0,
+      registration_expiring: 0,
+      open_issues_distinct_vehicles: 0,
+    };
+
+    const byShop = new Map<string, VehicleListItem[]>();
+    for (const v of vehicles) {
+      if (v.operational_status === "operational") totals.operational++;
+      else totals.grounded++;
+      if (v.registration_expiry_date) {
+        const exp = new Date(`${v.registration_expiry_date}T00:00:00Z`);
+        if (exp <= sixtyOut) totals.registration_expiring++;
+      }
+      if (v.open_issues_count > 0) totals.open_issues_distinct_vehicles++;
+
+      const shop = v.current_shop_location?.trim();
+      if (shop) {
+        const list = byShop.get(shop) ?? [];
+        list.push(v);
+        byShop.set(shop, list);
+      }
+    }
+
+    const { data: issuesData } = await supabase
+      .from("vehicle_issues")
+      .select("*")
+      .in("status", OPEN_ISSUE_STATUSES)
+      .order("reported_at", { ascending: false })
+      .limit(25);
+
+    const byId = new Map(vehicles.map((v) => [v.id, v]));
+    const openIssues = (
+      (issuesData ?? []) as VehicleIssueRow[]
+    )
+      .map((i) => {
+        const vehicle = byId.get(i.vehicle_id);
+        if (!vehicle) return null;
+        return { ...i, vehicle };
+      })
+      .filter((x): x is VehicleIssueRow & { vehicle: VehicleListItem } => !!x);
+
+    return { vehicles, totals, byShop, openIssues };
+  },
+);
+
+export const getVehicleByVin = cache(
+  async (vin: string): Promise<VehicleRow | null> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("*")
+      .eq("vin", vin)
+      .maybeSingle();
+    if (error) {
+      console.error("getVehicleByVin failed:", error);
+      return null;
+    }
+    return (data as VehicleRow) ?? null;
+  },
+);
+
+export const listVehicleIssues = cache(
+  async (vehicleId: string): Promise<VehicleIssueRow[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicle_issues")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("reported_at", { ascending: false });
+    if (error) {
+      console.error("listVehicleIssues failed:", error);
+      return [];
+    }
+    return (data as VehicleIssueRow[]) ?? [];
+  },
+);
+
+export const listVehicleParts = cache(
+  async (vehicleId: string): Promise<VehiclePartRow[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicle_parts")
+      .select("*")
+      .eq("vehicle_id", vehicleId)
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("listVehicleParts failed:", error);
+      return [];
+    }
+    return (data as VehiclePartRow[]) ?? [];
+  },
+);

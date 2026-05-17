@@ -8,6 +8,7 @@ import {
   Upload,
   ShieldUser,
   UserCog,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types/database";
@@ -21,6 +22,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/", label: "Performance", icon: LayoutDashboard, exact: true },
+  { href: "/fleet", label: "Fleet", icon: Truck },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/import", label: "Import", icon: Upload },
 ];
