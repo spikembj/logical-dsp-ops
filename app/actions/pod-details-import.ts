@@ -18,7 +18,10 @@ export interface PodDetailsImportSummary {
   error?: string;
   parsed?: ParsedPodDetails;
   matched_count?: number;
-  created_drivers_count?: number;
+  /** Drivers in the file who aren't in our roster — skipped, not created.
+   *  Driver profiles are created only by scorecards / DSP overview. */
+  skipped_unknown_count?: number;
+  skipped_unknown_sample?: string[];
   rows_written?: number;
   errors?: { driver_name: string; reason: string }[];
 }
@@ -93,7 +96,7 @@ export async function importPodDetailsPdf(
   const fileImportId = importRow.id as string;
 
   let matched = 0;
-  let createdDrivers = 0;
+  const skippedNames: string[] = [];
   const errors: PodDetailsImportSummary["errors"] = [];
   type Insert = {
     driver_id: string;
@@ -120,38 +123,20 @@ export async function importPodDetailsPdf(
     let driverId: string | undefined =
       byTid.get(d.transporter_id) ?? byName.get(normalizeName(d.full_name));
 
-    if (driverId) {
-      matched++;
-      if (!byTid.has(d.transporter_id)) {
-        const { error } = await supabase
-          .from("drivers")
-          .update({ transporter_id: d.transporter_id })
-          .eq("id", driverId)
-          .is("transporter_id", null);
-        if (!error) byTid.set(d.transporter_id, driverId);
-      }
-    } else {
-      const { data: created, error } = await supabase
+    if (!driverId) {
+      // Not in our roster — skip rather than auto-create. Only scorecards
+      // and DSP overview create drivers, since those are per-station.
+      skippedNames.push(d.full_name);
+      continue;
+    }
+    matched++;
+    if (!byTid.has(d.transporter_id)) {
+      const { error } = await supabase
         .from("drivers")
-        .insert({
-          full_name: d.full_name,
-          transporter_id: d.transporter_id,
-          status: "active",
-          approved_vehicle_types: [],
-        })
-        .select("id")
-        .single();
-      if (error || !created) {
-        errors.push({
-          driver_name: d.full_name,
-          reason: `Create failed: ${error?.message ?? "unknown"}`,
-        });
-        continue;
-      }
-      driverId = created.id as string;
-      byTid.set(d.transporter_id, driverId);
-      byName.set(normalizeName(d.full_name), driverId);
-      createdDrivers++;
+        .update({ transporter_id: d.transporter_id })
+        .eq("id", driverId)
+        .is("transporter_id", null);
+      if (!error) byTid.set(d.transporter_id, driverId);
     }
 
     const key = `${driverId}::${parsed.week_ending}`;
@@ -216,7 +201,8 @@ export async function importPodDetailsPdf(
       errors.length > 0 && writtenCount === 0 ? errors[0]?.reason : undefined,
     parsed,
     matched_count: matched,
-    created_drivers_count: createdDrivers,
+    skipped_unknown_count: skippedNames.length,
+    skipped_unknown_sample: skippedNames.slice(0, 5),
     rows_written: writtenCount,
     errors,
   };

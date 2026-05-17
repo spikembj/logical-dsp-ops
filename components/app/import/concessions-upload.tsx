@@ -120,8 +120,17 @@ export function ConcessionsUpload() {
             <dd>{summary.parsed.concessions.length}</dd>
             <dt className="text-muted-foreground">Matched existing</dt>
             <dd>{summary.matched_count ?? 0}</dd>
-            <dt className="text-muted-foreground">New drivers created</dt>
-            <dd>{summary.created_drivers_count ?? 0}</dd>
+            <dt className="text-muted-foreground">Skipped (not in our DSP)</dt>
+            <dd
+              title={
+                summary.skipped_unknown_sample &&
+                summary.skipped_unknown_sample.length > 0
+                  ? `e.g. ${summary.skipped_unknown_sample.join(", ")}${(summary.skipped_unknown_count ?? 0) > 5 ? "…" : ""}`
+                  : undefined
+              }
+            >
+              {summary.skipped_unknown_count ?? 0}
+            </dd>
             <dt className="text-muted-foreground">Concessions written</dt>
             <dd>{summary.concessions_written ?? 0}</dd>
             {summary.errors && summary.errors.length > 0 && (

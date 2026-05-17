@@ -18,7 +18,12 @@ export interface ConcessionsImportSummary {
   error?: string;
   parsed?: ParsedConcessionsReport;
   matched_count?: number;
-  created_drivers_count?: number;
+  /** Drivers in the file who don't exist in our roster — skipped, not created.
+   *  Amazon's concessions CSV file name often ends in `_ALL_…`, meaning it
+   *  spans every DSP on the account, so unknown names are almost always
+   *  drivers from another station (e.g. DUT4 in our case). */
+  skipped_unknown_count?: number;
+  skipped_unknown_sample?: string[];
   concessions_written?: number;
   errors?: { driver_name: string; reason: string }[];
 }
@@ -94,7 +99,7 @@ export async function importConcessionsCsv(
   const fileImportId = importRow.id as string;
 
   let matched = 0;
-  let createdDrivers = 0;
+  const skippedNames: string[] = [];
   const errors: ConcessionsImportSummary["errors"] = [];
   type Insert = {
     driver_id: string;
@@ -118,38 +123,22 @@ export async function importConcessionsCsv(
     let driverId: string | undefined =
       byTid.get(c.transporter_id) ?? byName.get(normalizeName(c.full_name));
 
-    if (driverId) {
-      matched++;
-      if (!byTid.has(c.transporter_id)) {
-        const { error } = await supabase
-          .from("drivers")
-          .update({ transporter_id: c.transporter_id })
-          .eq("id", driverId)
-          .is("transporter_id", null);
-        if (!error) byTid.set(c.transporter_id, driverId);
-      }
-    } else {
-      const { data: created, error } = await supabase
+    if (!driverId) {
+      // Not in our roster — skip rather than auto-create. Driver profiles
+      // are created only from scorecards / DSP overview (per-station). All
+      // other imports are match-only to avoid pulling in drivers from
+      // other DSPs on shared Amazon exports.
+      skippedNames.push(c.full_name);
+      continue;
+    }
+    matched++;
+    if (!byTid.has(c.transporter_id)) {
+      const { error } = await supabase
         .from("drivers")
-        .insert({
-          full_name: c.full_name,
-          transporter_id: c.transporter_id,
-          status: "active",
-          approved_vehicle_types: [],
-        })
-        .select("id")
-        .single();
-      if (error || !created) {
-        errors.push({
-          driver_name: c.full_name,
-          reason: `Create failed: ${error?.message ?? "unknown"}`,
-        });
-        continue;
-      }
-      driverId = created.id as string;
-      byTid.set(c.transporter_id, driverId);
-      byName.set(normalizeName(c.full_name), driverId);
-      createdDrivers++;
+        .update({ transporter_id: c.transporter_id })
+        .eq("id", driverId)
+        .is("transporter_id", null);
+      if (!error) byTid.set(c.transporter_id, driverId);
     }
 
     const key = `${driverId}::${c.tracking_id}`;
@@ -209,7 +198,8 @@ export async function importConcessionsCsv(
     error: errors.length > 0 && writtenCount === 0 ? errors[0]?.reason : undefined,
     parsed,
     matched_count: matched,
-    created_drivers_count: createdDrivers,
+    skipped_unknown_count: skippedNames.length,
+    skipped_unknown_sample: skippedNames.slice(0, 5),
     concessions_written: writtenCount,
     errors,
   };

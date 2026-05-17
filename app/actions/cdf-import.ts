@@ -18,7 +18,10 @@ export interface CdfImportSummary {
   error?: string;
   parsed?: ParsedCdfNegativeReport;
   matched_count?: number;
-  created_drivers_count?: number;
+  /** Drivers in the file who aren't in our roster — skipped, not created.
+   *  Driver profiles are created only by scorecards / DSP overview. */
+  skipped_unknown_count?: number;
+  skipped_unknown_sample?: string[];
   rows_written?: number;
   errors?: { driver_name: string; reason: string }[];
 }
@@ -94,7 +97,7 @@ export async function importCdfNegativeCsv(
   const fileImportId = importRow.id as string;
 
   let matched = 0;
-  let createdDrivers = 0;
+  const skippedNames: string[] = [];
   const errors: CdfImportSummary["errors"] = [];
   type Insert = {
     driver_id: string;
@@ -112,38 +115,20 @@ export async function importCdfNegativeCsv(
     let driverId: string | undefined =
       byTid.get(c.transporter_id) ?? byName.get(normalizeName(c.full_name));
 
-    if (driverId) {
-      matched++;
-      if (!byTid.has(c.transporter_id)) {
-        const { error } = await supabase
-          .from("drivers")
-          .update({ transporter_id: c.transporter_id })
-          .eq("id", driverId)
-          .is("transporter_id", null);
-        if (!error) byTid.set(c.transporter_id, driverId);
-      }
-    } else {
-      const { data: created, error } = await supabase
+    if (!driverId) {
+      // Not in our roster — skip rather than auto-create. Only scorecards
+      // and DSP overview create drivers, since those are per-station.
+      skippedNames.push(c.full_name);
+      continue;
+    }
+    matched++;
+    if (!byTid.has(c.transporter_id)) {
+      const { error } = await supabase
         .from("drivers")
-        .insert({
-          full_name: c.full_name,
-          transporter_id: c.transporter_id,
-          status: "active",
-          approved_vehicle_types: [],
-        })
-        .select("id")
-        .single();
-      if (error || !created) {
-        errors.push({
-          driver_name: c.full_name,
-          reason: `Create failed: ${error?.message ?? "unknown"}`,
-        });
-        continue;
-      }
-      driverId = created.id as string;
-      byTid.set(c.transporter_id, driverId);
-      byName.set(normalizeName(c.full_name), driverId);
-      createdDrivers++;
+        .update({ transporter_id: c.transporter_id })
+        .eq("id", driverId)
+        .is("transporter_id", null);
+      if (!error) byTid.set(c.transporter_id, driverId);
     }
 
     const key = `${driverId}::${c.tracking_id}`;
@@ -199,7 +184,8 @@ export async function importCdfNegativeCsv(
       errors.length > 0 && writtenCount === 0 ? errors[0]?.reason : undefined,
     parsed,
     matched_count: matched,
-    created_drivers_count: createdDrivers,
+    skipped_unknown_count: skippedNames.length,
+    skipped_unknown_sample: skippedNames.slice(0, 5),
     rows_written: writtenCount,
     errors,
   };
