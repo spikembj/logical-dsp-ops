@@ -22,8 +22,8 @@ export default async function ShopsAdminPage() {
         <p className="text-sm text-muted-foreground mt-0.5">
           Where a van can be right now. Picks from this list show up in
           each van&rsquo;s <em>Current shop / location</em> dropdown on
-          the Fleet page. Sort order controls dropdown order; toggle
-          Active off to hide a shop without losing it.
+          the Fleet page. Drag rows to reorder the dropdown; click the
+          Active chip to hide a shop without losing it.
         </p>
       </div>
       <ShopsAdmin shops={shops} />

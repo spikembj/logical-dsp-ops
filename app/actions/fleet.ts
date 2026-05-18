@@ -101,6 +101,44 @@ export async function upsertVehicleShop(
   return { ok: true };
 }
 
+const ReorderShopsSchema = z.object({
+  ordered_ids: z.array(z.string().uuid()).min(1),
+});
+
+/**
+ * Rewrite sort_order for the supplied list of shops in one shot:
+ * the first id becomes sort_order=10, second 20, etc. We space by 10
+ * so future single-row tweaks can land between two existing values
+ * without rewriting the whole list. The page always shows shops in
+ * (active desc, sort_order, name) so the caller should send the full
+ * list in the desired visual order.
+ */
+export async function reorderVehicleShops(
+  input: z.infer<typeof ReorderShopsSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = ReorderShopsSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  // Run updates in parallel — there is no FK between rows, so order
+  // does not matter. Each call is small and unique-by-id.
+  const updates = parsed.data.ordered_ids.map((id, idx) =>
+    supabase
+      .from("vehicle_shops")
+      .update({ sort_order: (idx + 1) * 10 })
+      .eq("id", id),
+  );
+  const results = await Promise.all(updates);
+  const firstErr = results.find((r) => r.error)?.error;
+  if (firstErr) return { ok: false, error: firstErr.message };
+
+  revalidatePath("/admin/shops");
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}
+
 const DeleteShopSchema = z.object({ shop_id: z.string().uuid() });
 
 export async function deleteVehicleShop(
