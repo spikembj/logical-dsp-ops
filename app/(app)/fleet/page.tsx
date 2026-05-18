@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { AlertTriangle, Wrench, MapPin, ArrowRight } from "lucide-react";
+import { AlertTriangle, Wrench, MapPin, ArrowRight, Store } from "lucide-react";
+import { requireUser } from "@/lib/auth/require-role";
+import { isManagement, type UserRole } from "@/lib/types/database";
 import {
   getFleetDashboardData,
   getPaveStatusForQuarter,
@@ -23,6 +25,8 @@ import { cn } from "@/lib/utils";
  * shop location, and our own issue/parts tracker.
  */
 export default async function FleetPage() {
+  const me = await requireUser();
+  const canManage = isManagement(me.role as UserRole);
   const { vehicles, totals, byShop, openIssues } = await getFleetDashboardData();
 
   // Quarterly PAVE roster, computed at request time. Operational vans only —
@@ -107,6 +111,17 @@ export default async function FleetPage() {
           >
             QR sheet
           </Link>
+          {canManage && (
+            <>
+              <span className="text-muted-foreground">·</span>
+              <Link
+                href="/admin/shops"
+                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
+              >
+                <Store className="h-3 w-3" /> Shops
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

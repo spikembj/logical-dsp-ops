@@ -9,8 +9,6 @@ import {
   ShieldUser,
   Truck,
   CalendarClock,
-  Clock,
-  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types/database";
@@ -32,8 +30,6 @@ const NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin/users", label: "Management", icon: ShieldUser },
-  { href: "/admin/waves", label: "Wave times", icon: Clock },
-  { href: "/admin/shops", label: "Shops", icon: Store },
 ];
 
 export function SidebarNav({ role }: { role: UserRole }) {

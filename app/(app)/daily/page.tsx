@@ -1,4 +1,4 @@
-import { Printer } from "lucide-react";
+import { Clock, Printer } from "lucide-react";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/require-role";
 import { isManagement, type UserRole } from "@/lib/types/database";
@@ -92,6 +92,15 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
             <Printer className="h-4 w-4" />
             Daily Paper
           </Link>
+          {canManage && (
+            <Link
+              href="/admin/waves"
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted text-sm transition-colors"
+            >
+              <Clock className="h-4 w-4" />
+              Wave times
+            </Link>
+          )}
         </div>
       </div>
 
