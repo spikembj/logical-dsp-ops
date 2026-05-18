@@ -54,13 +54,21 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
   const driverPool = drivers
     .filter((d) => d.status === "active" && d.position === "driver")
     .map((d) => ({ id: d.id, full_name: d.full_name }));
+  // Natural sort by vehicle name so 1, 2, 10 land in numeric order before
+  // CDV1, CDV2, then R-prefixed Rivians. Matches the dispatcher's existing
+  // mental model from the spreadsheet.
+  const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
   const vehiclePool = vehicles
     .filter((v) => v.operational_status === "operational")
     .map((v) => ({
       id: v.id,
       vehicle_name: v.vehicle_name ?? v.vin,
       vin: v.vin,
-    }));
+    }))
+    .sort((a, b) => collator.compare(a.vehicle_name, b.vehicle_name));
   const activeWaves = waveTimes.filter((w) => w.active);
 
   return (

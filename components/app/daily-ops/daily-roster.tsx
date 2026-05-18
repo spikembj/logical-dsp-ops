@@ -1,30 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Copy, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Copy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -56,6 +38,16 @@ interface VehiclePick {
   vin: string;
 }
 
+/**
+ * Van-first roster: one row per operational van, dispatcher fills in
+ * driver name (autocomplete) + wave (dropdown) + optional notes.
+ * Mirrors the dispatcher's existing spreadsheet workflow.
+ *
+ * Auto-save behavior: whenever a row has both a valid driver AND a
+ * wave, changes commit on field blur (or immediately on wave change).
+ * Clearing the driver deletes the row. Race-safe via simple per-row
+ * pending state — the user can keep typing while a save is in flight.
+ */
 export function DailyRoster({
   date,
   roster,
@@ -76,18 +68,33 @@ export function DailyRoster({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  // For the picker UX: a driver/van already on today's roster can still
-  // be selected from the SAME row's dialog (when editing) but should be
-  // hidden from OTHER rows' add/edit dialogs to prevent the obvious
-  // conflict. Edit dialogs handle this by passing currentDriverId /
-  // currentVehicleId; the dialog allows those even if in the rostered
-  // set.
+  // Name → driver_id lookup for the datalist autocomplete. Build once;
+  // dedupe on exact name (case-sensitive — Amazon names are usually
+  // consistent in casing).
+  const nameToId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of drivers) {
+      if (!m.has(d.full_name)) m.set(d.full_name, d.id);
+    }
+    return m;
+  }, [drivers]);
+  const idToName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of drivers) m.set(d.id, d.full_name);
+    return m;
+  }, [drivers]);
+
+  // Index existing roster entries by vehicle_id for quick row lookup.
+  const entryByVehicle = useMemo(() => {
+    const m = new Map<string, DailyRosterEntry>();
+    for (const r of roster) m.set(r.vehicle_id, r);
+    return m;
+  }, [roster]);
+
+  // Track which driver_ids are already on the roster so we can warn the
+  // user before they double-assign someone.
   const rosteredDriverIds = useMemo(
     () => new Set(roster.map((r) => r.driver_id)),
-    [roster],
-  );
-  const rosteredVehicleIds = useMemo(
-    () => new Set(roster.map((r) => r.vehicle_id)),
     [roster],
   );
 
@@ -108,7 +115,9 @@ export function DailyRoster({
         toast.error(res.error ?? "Copy failed.");
         return;
       }
-      const bits: string[] = [`copied ${res.copied_count} from ${res.source_date}`];
+      const bits: string[] = [
+        `copied ${res.copied_count} from ${res.source_date}`,
+      ];
       if (res.skipped_van_grounded)
         bits.push(`${res.skipped_van_grounded} vans now grounded`);
       if (res.skipped_driver_inactive)
@@ -120,36 +129,26 @@ export function DailyRoster({
     });
   }
 
+  const assignedCount = roster.length;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-xs text-muted-foreground">
-          Sorted by wave then van. Operational vans only.
+          {vehicles.length} operational vans · {assignedCount} assigned · Type
+          a name to autocomplete; changes save automatically.
         </div>
-        {canWrite && (
-          <div className="flex items-center gap-2">
-            {prevDate && roster.length === 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleCopyPrev}
-                disabled={pending}
-              >
-                <Copy className="mr-1.5 h-4 w-4" />
-                Copy from {formatSessionDate(prevDate)}
-              </Button>
-            )}
-            <RosterDialog
-              mode="create"
-              date={date}
-              waves={waves}
-              drivers={drivers}
-              vehicles={vehicles}
-              rosteredDriverIds={rosteredDriverIds}
-              rosteredVehicleIds={rosteredVehicleIds}
-            />
-          </div>
+        {canWrite && prevDate && assignedCount === 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleCopyPrev}
+            disabled={pending}
+          >
+            <Copy className="mr-1.5 h-4 w-4" />
+            Copy from {formatSessionDate(prevDate)}
+          </Button>
         )}
       </div>
 
@@ -157,379 +156,361 @@ export function DailyRoster({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-20">Wave</TableHead>
+              <TableHead className="w-44">Van</TableHead>
               <TableHead>Driver</TableHead>
-              <TableHead>Van</TableHead>
+              <TableHead className="w-40">Wave</TableHead>
               <TableHead>Notes</TableHead>
-              {canWrite && <TableHead className="text-right w-20" />}
+              {canWrite && <TableHead className="w-10 text-right" />}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {roster.length === 0 ? (
+            {vehicles.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={canWrite ? 5 : 4}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
-                  No assignments yet for {formatSessionDate(date)}.
-                  {canWrite && prevDate && (
-                    <>
-                      {" "}
-                      Use <strong>Copy from {formatSessionDate(prevDate)}</strong>{" "}
-                      above to seed, or <strong>Add</strong> rows manually.
-                    </>
-                  )}
+                  No operational vans. Import the Vehicles xlsx (or clear
+                  manual grounding overrides in Fleet) so vans appear here.
                 </TableCell>
               </TableRow>
             ) : (
-              roster.map((r) => (
-                <TableRow key={r.id} className="hover:bg-muted/30">
-                  <TableCell className="font-mono text-sm tabular-nums">
-                    <span className="font-medium">{r.wave}</span>{" "}
-                    <span className="text-muted-foreground">
-                      · {formatShowTime(r.show_time)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/drivers/${r.driver_id}`}
-                      className="hover:underline font-medium"
-                    >
-                      {r.driver_name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/fleet/vans/${r.vehicle_vin}`}
-                      className="hover:underline"
-                    >
-                      {r.vehicle_name ?? r.vehicle_vin}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {r.notes ?? <span className="text-muted-foreground/60">—</span>}
-                  </TableCell>
-                  {canWrite && (
-                    <TableCell className="text-right">
-                      <RosterDialog
-                        mode="edit"
-                        date={date}
-                        entry={r}
-                        waves={waves}
-                        drivers={drivers}
-                        vehicles={vehicles}
-                        rosteredDriverIds={rosteredDriverIds}
-                        rosteredVehicleIds={rosteredVehicleIds}
-                      />
-                    </TableCell>
-                  )}
-                </TableRow>
+              vehicles.map((v) => (
+                <VanRow
+                  key={v.id}
+                  date={date}
+                  vehicle={v}
+                  entry={entryByVehicle.get(v.id) ?? null}
+                  waves={waves}
+                  drivers={drivers}
+                  nameToId={nameToId}
+                  idToName={idToName}
+                  rosteredDriverIds={rosteredDriverIds}
+                  canWrite={canWrite}
+                />
               ))
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* Single shared datalist for every row's driver input. */}
+      <datalist id="dr-driver-options">
+        {drivers.map((d) => (
+          <option key={d.id} value={d.full_name} />
+        ))}
+      </datalist>
     </div>
   );
 }
 
-type DialogProps =
-  | {
-      mode: "create";
-      date: string;
-      entry?: undefined;
-      waves: WaveTime[];
-      drivers: DriverPick[];
-      vehicles: VehiclePick[];
-      rosteredDriverIds: Set<string>;
-      rosteredVehicleIds: Set<string>;
-    }
-  | {
-      mode: "edit";
-      date: string;
-      entry: DailyRosterEntry;
-      waves: WaveTime[];
-      drivers: DriverPick[];
-      vehicles: VehiclePick[];
-      rosteredDriverIds: Set<string>;
-      rosteredVehicleIds: Set<string>;
-    };
+type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
 
-function RosterDialog(props: DialogProps) {
+function VanRow({
+  date,
+  vehicle,
+  entry,
+  waves,
+  drivers: _drivers,
+  nameToId,
+  idToName,
+  rosteredDriverIds,
+  canWrite,
+}: {
+  date: string;
+  vehicle: VehiclePick;
+  entry: DailyRosterEntry | null;
+  waves: WaveTime[];
+  drivers: DriverPick[];
+  nameToId: Map<string, string>;
+  idToName: Map<string, string>;
+  rosteredDriverIds: Set<string>;
+  canWrite: boolean;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [entryId, setEntryId] = useState<string | null>(entry?.id ?? null);
 
-  const isEdit = props.mode === "edit";
-
-  const [driverId, setDriverId] = useState(
-    isEdit ? props.entry.driver_id : "",
-  );
-  const [vehicleId, setVehicleId] = useState(
-    isEdit ? props.entry.vehicle_id : "",
+  const [driverName, setDriverName] = useState(
+    entry?.driver_id ? (idToName.get(entry.driver_id) ?? "") : "",
   );
   const [wave, setWave] = useState<string>(
-    isEdit ? String(props.entry.wave) : props.waves[0]?.wave.toString() ?? "1",
+    entry?.wave !== undefined ? String(entry.wave) : "",
   );
-  const [notes, setNotes] = useState(isEdit ? props.entry.notes ?? "" : "");
-  const [driverQuery, setDriverQuery] = useState("");
-  const [vehicleQuery, setVehicleQuery] = useState("");
+  const [notes, setNotes] = useState(entry?.notes ?? "");
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  // Cache the last successfully-saved state so we can diff before
+  // firing redundant saves. Using a ref so updates don't re-render.
+  const savedRef = useRef({
+    driverId: entry?.driver_id ?? null,
+    wave: entry?.wave !== undefined ? String(entry.wave) : "",
+    notes: entry?.notes ?? "",
+  });
 
-  const availableDrivers = useMemo(() => {
-    const q = driverQuery.trim().toLowerCase();
-    return props.drivers.filter((d) => {
-      // Hide drivers already on today's roster EXCEPT the one assigned
-      // to this row in edit mode.
-      if (
-        props.rosteredDriverIds.has(d.id) &&
-        !(isEdit && d.id === props.entry.driver_id)
-      )
-        return false;
-      if (!q) return true;
-      return d.full_name.toLowerCase().includes(q);
-    });
-  }, [props.drivers, props.rosteredDriverIds, driverQuery, isEdit, props]);
+  const driverId = nameToId.get(driverName.trim()) ?? null;
 
-  const availableVehicles = useMemo(() => {
-    const q = vehicleQuery.trim().toLowerCase();
-    return props.vehicles.filter((v) => {
-      if (
-        props.rosteredVehicleIds.has(v.id) &&
-        !(isEdit && v.id === props.entry.vehicle_id)
-      )
-        return false;
-      if (!q) return true;
-      return (
-        v.vehicle_name.toLowerCase().includes(q) ||
-        v.vin.toLowerCase().includes(q)
-      );
-    });
-  }, [props.vehicles, props.rosteredVehicleIds, vehicleQuery, isEdit, props]);
+  const hasMatchedDriver = driverName.trim().length === 0 || driverId !== null;
+  const isValid =
+    driverId !== null && wave !== "" && wave !== "—" && hasMatchedDriver;
 
-  function reset() {
-    if (isEdit) {
-      setDriverId(props.entry.driver_id);
-      setVehicleId(props.entry.vehicle_id);
-      setWave(String(props.entry.wave));
-      setNotes(props.entry.notes ?? "");
-    } else {
-      setDriverId("");
-      setVehicleId("");
-      setWave(props.waves[0]?.wave.toString() ?? "1");
+  /**
+   * Sync the row to the server. Triggered on every relevant change
+   * (driver picked / wave picked / notes blurred). Decides
+   * insert/update/delete based on current state vs saved state.
+   */
+  async function sync() {
+    if (!canWrite) return;
+    const saved = savedRef.current;
+
+    // CASE: row had an entry and driver is now empty → delete.
+    if (entryId && driverName.trim() === "") {
+      setStatus("saving");
+      const res = await deleteRosterEntry({ entry_id: entryId });
+      if (!res.ok) {
+        setStatus("error");
+        toast.error(res.error);
+        return;
+      }
+      setEntryId(null);
+      savedRef.current = { driverId: null, wave: "", notes: "" };
+      setStatus("saved");
+      setWave("");
       setNotes("");
-    }
-    setDriverQuery("");
-    setVehicleQuery("");
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!driverId || !vehicleId) {
-      toast.error("Pick a driver and a van.");
+      window.setTimeout(() => setStatus("idle"), 1200);
+      router.refresh();
       return;
     }
-    startTransition(async () => {
-      const payload = {
+
+    // If the driver text exists but doesn't match anyone, hold.
+    if (driverName.trim() !== "" && !driverId) {
+      setStatus("dirty");
+      return;
+    }
+    // If we need both driver + wave but don't have wave yet, hold.
+    if (driverId && !wave) {
+      setStatus("dirty");
+      return;
+    }
+    // No driver picked → nothing to do.
+    if (!driverId) {
+      setStatus("idle");
+      return;
+    }
+
+    // Diff against saved state.
+    const cleanNotes = notes.trim();
+    const cleanSavedNotes = saved.notes.trim();
+    const unchanged =
+      driverId === saved.driverId &&
+      wave === saved.wave &&
+      cleanNotes === cleanSavedNotes;
+    if (unchanged) {
+      setStatus("idle");
+      return;
+    }
+
+    // Conflict pre-check: assigning a driver who's already on a
+    // DIFFERENT van's row today.
+    if (
+      driverId !== saved.driverId &&
+      rosteredDriverIds.has(driverId)
+    ) {
+      setStatus("error");
+      toast.error(
+        `${driverName.trim()} is already on today's roster — clear the other van first.`,
+      );
+      return;
+    }
+
+    setStatus("saving");
+    if (entryId) {
+      const res = await updateRosterEntry({
+        entry_id: entryId,
         driver_id: driverId,
-        vehicle_id: vehicleId,
+        vehicle_id: vehicle.id,
         wave: Number(wave),
-        notes: notes.trim() || null,
-      };
-      const res = isEdit
-        ? await updateRosterEntry({ entry_id: props.entry.id, ...payload })
-        : await createRosterEntry({ date: props.date, ...payload });
+        notes: cleanNotes || null,
+      });
       if (!res.ok) {
+        setStatus("error");
         toast.error(res.error);
         return;
       }
-      toast.success(isEdit ? "Updated." : "Added.");
-      setOpen(false);
-      router.refresh();
-    });
+    } else {
+      const res = await createRosterEntry({
+        date,
+        driver_id: driverId,
+        vehicle_id: vehicle.id,
+        wave: Number(wave),
+        notes: cleanNotes || null,
+      });
+      if (!res.ok) {
+        setStatus("error");
+        toast.error(res.error);
+        return;
+      }
+      setEntryId(res.entry_id);
+    }
+
+    savedRef.current = { driverId, wave, notes: cleanNotes };
+    setStatus("saved");
+    window.setTimeout(() => setStatus("idle"), 1200);
+    router.refresh();
   }
 
-  function handleDelete() {
-    if (!isEdit) return;
-    if (!confirm(`Remove ${props.entry.driver_name} from the roster?`)) return;
-    startTransition(async () => {
-      const res = await deleteRosterEntry({ entry_id: props.entry.id });
-      if (!res.ok) {
-        toast.error(res.error);
-        return;
-      }
-      toast.success("Removed.");
-      setOpen(false);
-      router.refresh();
-    });
+  // Wave changes commit immediately (it's a discrete value, not typing).
+  useEffect(() => {
+    if (status === "saving") return;
+    // Skip the initial render — savedRef matches state, sync() will no-op.
+    const saved = savedRef.current;
+    if (saved.wave === wave) return;
+    void sync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wave]);
+
+  // Mark dirty on driver/notes typing for the visual indicator.
+  useEffect(() => {
+    const saved = savedRef.current;
+    const cleanNotes = notes.trim();
+    const changed =
+      driverId !== saved.driverId ||
+      notes.trim() !== saved.notes.trim();
+    if (changed && status !== "saving") {
+      setStatus(driverId && wave ? "dirty" : "dirty");
+    } else if (!changed && status === "dirty") {
+      setStatus("idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverName, notes]);
+
+  function handleClear() {
+    if (!entryId) {
+      // Nothing to delete — just reset local state.
+      setDriverName("");
+      setWave("");
+      setNotes("");
+      setStatus("idle");
+      return;
+    }
+    if (!confirm(`Remove ${driverName.trim()} from ${vehicle.vehicle_name}?`))
+      return;
+    setDriverName("");
+    // sync() will detect entryId + empty driver → delete.
+    void sync();
   }
+
+  const showDriverWarning = driverName.trim() !== "" && !driverId;
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v);
-        if (!v) reset();
-      }}
-    >
-      <DialogTrigger
-        className={
-          isEdit
-            ? "inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            : "inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-foreground text-background text-sm font-medium hover:bg-foreground/90 transition-colors"
-        }
-        aria-label={isEdit ? "Edit assignment" : "Add assignment"}
-      >
-        {isEdit ? <Pencil className="h-3.5 w-3.5" /> : <><Plus className="h-4 w-4" /> Add</>}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {isEdit ? "Edit assignment" : "Add to roster"}
-          </DialogTitle>
-          <DialogDescription>
-            {formatSessionDate(props.date)} · Operational vans only.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Wave */}
-          <div className="space-y-2">
-            <Label>Wave</Label>
-            <Select
-              value={wave}
-              onValueChange={(v) => setWave(v ?? wave)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {props.waves.map((w) => (
-                  <SelectItem key={w.wave} value={String(w.wave)}>
-                    Wave {w.wave} · {formatShowTime(w.show_time)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Driver picker (searchable) */}
-          <div className="space-y-2">
-            <Label>Driver</Label>
-            <div className="flex items-center h-9 w-full rounded-lg border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-              <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
-              <input
-                type="search"
-                value={driverQuery}
-                onChange={(e) => setDriverQuery(e.currentTarget.value)}
-                placeholder="Search drivers"
-                className="flex-1 min-w-0 px-2 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-            <div className="max-h-40 overflow-y-auto rounded-md border">
-              {availableDrivers.length === 0 ? (
-                <p className="p-3 text-center text-xs text-muted-foreground">
-                  No matches.
-                </p>
-              ) : (
-                <ul>
-                  {availableDrivers.map((d) => (
-                    <li key={d.id}>
-                      <button
-                        type="button"
-                        onClick={() => setDriverId(d.id)}
-                        className={
-                          "w-full text-left px-3 py-1.5 text-sm hover:bg-muted/40 " +
-                          (driverId === d.id ? "bg-muted font-medium" : "")
-                        }
-                      >
-                        {d.full_name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* Vehicle picker (searchable) */}
-          <div className="space-y-2">
-            <Label>Van</Label>
-            <div className="flex items-center h-9 w-full rounded-lg border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-              <Search className="ml-3 h-4 w-4 shrink-0 text-muted-foreground" />
-              <input
-                type="search"
-                value={vehicleQuery}
-                onChange={(e) => setVehicleQuery(e.currentTarget.value)}
-                placeholder="Search van name or VIN"
-                className="flex-1 min-w-0 px-2 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-            <div className="max-h-40 overflow-y-auto rounded-md border">
-              {availableVehicles.length === 0 ? (
-                <p className="p-3 text-center text-xs text-muted-foreground">
-                  No matches.
-                </p>
-              ) : (
-                <ul>
-                  {availableVehicles.map((v) => (
-                    <li key={v.id}>
-                      <button
-                        type="button"
-                        onClick={() => setVehicleId(v.id)}
-                        className={
-                          "w-full text-left px-3 py-1.5 text-sm hover:bg-muted/40 " +
-                          (vehicleId === v.id ? "bg-muted font-medium" : "")
-                        }
-                      >
-                        {v.vehicle_name}{" "}
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {v.vin.slice(0, 14)}…
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="roster-notes">Notes (optional)</Label>
-            <Textarea
-              id="roster-notes"
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.currentTarget.value)}
-            />
-          </div>
-
-          <DialogFooter>
-            {isEdit && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDelete}
-                disabled={pending}
-                className="mr-auto text-destructive hover:text-destructive"
-              >
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                Remove
-              </Button>
-            )}
-            <Button
+    <TableRow className={status === "saving" ? "opacity-70" : undefined}>
+      <TableCell className="font-medium">
+        <Link
+          href={`/fleet/vans/${vehicle.vin}`}
+          className="hover:underline"
+        >
+          {vehicle.vehicle_name}
+        </Link>
+      </TableCell>
+      <TableCell>
+        <Input
+          type="text"
+          list="dr-driver-options"
+          value={driverName}
+          onChange={(e) => setDriverName(e.currentTarget.value)}
+          onBlur={() => void sync()}
+          placeholder="Type a driver name…"
+          disabled={!canWrite}
+          aria-invalid={showDriverWarning}
+          className={
+            showDriverWarning
+              ? "border-amber-500 focus-visible:border-amber-500"
+              : undefined
+          }
+        />
+        {showDriverWarning && (
+          <p className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+            No driver named &ldquo;{driverName.trim()}&rdquo; — pick from the
+            list.
+          </p>
+        )}
+      </TableCell>
+      <TableCell>
+        <select
+          value={wave}
+          onChange={(e) => setWave(e.currentTarget.value)}
+          disabled={!canWrite || !driverId}
+          className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+        >
+          <option value="">—</option>
+          {waves.map((w) => (
+            <option key={w.wave} value={String(w.wave)}>
+              {w.wave} · {formatShowTime(w.show_time)}
+            </option>
+          ))}
+        </select>
+      </TableCell>
+      <TableCell>
+        <Input
+          type="text"
+          value={notes}
+          onChange={(e) => setNotes(e.currentTarget.value)}
+          onBlur={() => void sync()}
+          placeholder=""
+          disabled={!canWrite || !driverId}
+        />
+      </TableCell>
+      {canWrite && (
+        <TableCell className="text-right">
+          <RowStatusBadge status={status} hasEntry={!!entryId} />
+          {entryId && (
+            <button
               type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-              disabled={pending}
+              onClick={handleClear}
+              disabled={status === "saving"}
+              aria-label="Clear row"
+              className="ml-1 inline-flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted transition-colors disabled:opacity-50"
             >
-              <X className="mr-1.5 h-4 w-4" />
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </TableCell>
+      )}
+    </TableRow>
   );
+}
+
+function RowStatusBadge({
+  status,
+  hasEntry,
+}: {
+  status: SaveStatus;
+  hasEntry: boolean;
+}) {
+  if (status === "saving")
+    return (
+      <span className="text-[10px] text-muted-foreground tabular-nums">
+        saving…
+      </span>
+    );
+  if (status === "saved")
+    return <Check className="inline-block h-3.5 w-3.5 text-emerald-600" />;
+  if (status === "dirty")
+    return (
+      <span
+        className="inline-block h-2 w-2 rounded-full bg-amber-500"
+        title="Unsaved changes"
+      />
+    );
+  if (status === "error")
+    return (
+      <span
+        className="inline-block h-2 w-2 rounded-full bg-red-500"
+        title="Save failed"
+      />
+    );
+  return hasEntry ? (
+    <span
+      className="inline-block h-2 w-2 rounded-full bg-emerald-500/60"
+      title="Saved"
+    />
+  ) : null;
 }

@@ -18,6 +18,11 @@ const Iso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD");
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+/** Same shape as ActionResult but with the new row id when creating. */
+export type CreateResult =
+  | { ok: true; entry_id: string }
+  | { ok: false; error: string };
+
 function fail(issues: z.ZodError["issues"]): ActionResult {
   return { ok: false, error: issues.map((i) => i.message).join(", ") };
 }
@@ -79,29 +84,34 @@ const CreateRosterSchema = z.object({
 
 export async function createRosterEntry(
   input: z.infer<typeof CreateRosterSchema>,
-): Promise<ActionResult> {
+): Promise<CreateResult> {
   const gate = await requireOperations();
   if (!gate.ok) return gate;
   const parsed = CreateRosterSchema.safeParse(input);
-  if (!parsed.success) return fail(parsed.error.issues);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]!.message };
+  }
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { error } = await supabase.from("daily_roster").insert({
-    date: parsed.data.date,
-    driver_id: parsed.data.driver_id,
-    vehicle_id: parsed.data.vehicle_id,
-    wave: parsed.data.wave,
-    notes: parsed.data.notes ?? null,
-    created_by: user?.id ?? null,
-    updated_by: user?.id ?? null,
-  });
+  const { data, error } = await supabase
+    .from("daily_roster")
+    .insert({
+      date: parsed.data.date,
+      driver_id: parsed.data.driver_id,
+      vehicle_id: parsed.data.vehicle_id,
+      wave: parsed.data.wave,
+      notes: parsed.data.notes ?? null,
+      created_by: user?.id ?? null,
+      updated_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
   if (error) {
     if (error.code === "23505") {
-      // Unique constraint violation — driver or van already on today's roster.
       return {
         ok: false,
         error: error.message.includes("driver")
@@ -112,7 +122,7 @@ export async function createRosterEntry(
     return { ok: false, error: error.message };
   }
   revalidatePath("/daily");
-  return { ok: true };
+  return { ok: true, entry_id: data.id as string };
 }
 
 const UpdateRosterSchema = z.object({
