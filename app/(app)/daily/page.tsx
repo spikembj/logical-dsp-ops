@@ -7,6 +7,7 @@ import {
   getRosterForDate,
   listWaveTimes,
   getMostRecentRosterDate,
+  getMostRecentDriverByVehicle,
 } from "@/lib/queries/daily-ops";
 import { listDrivers } from "@/lib/queries/drivers";
 import { listVehicles } from "@/lib/queries/fleet";
@@ -39,13 +40,15 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
       me.role as UserRole,
     );
 
-  const [roster, waveTimes, drivers, vehicles, prevDate] = await Promise.all([
-    getRosterForDate(date),
-    listWaveTimes(),
-    listDrivers(),
-    listVehicles(),
-    getMostRecentRosterDate(date),
-  ]);
+  const [roster, waveTimes, drivers, vehicles, prevDate, lastDriverByVehicle] =
+    await Promise.all([
+      getRosterForDate(date),
+      listWaveTimes(),
+      listDrivers(),
+      listVehicles(),
+      getMostRecentRosterDate(date),
+      getMostRecentDriverByVehicle(date),
+    ]);
 
   // Picker pools: drivers must be active + position=driver; vans must be
   // operational. We do NOT remove already-rostered drivers/vans here —
@@ -102,6 +105,7 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
         vehicles={vehiclePool}
         canWrite={canWrite}
         prevDate={prevDate}
+        lastDriverByVehicle={Object.fromEntries(lastDriverByVehicle)}
       />
     </div>
   );

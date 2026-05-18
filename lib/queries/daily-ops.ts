@@ -87,6 +87,38 @@ export const getRosterForDate = cache(
 );
 
 /**
+ * For each vehicle, return the most recent driver assigned to it before
+ * `before`. Used to prefill the driver column on a fresh roster — the
+ * dispatcher told us the common case is "same driver as yesterday, just
+ * need to pick today's wave."
+ *
+ * Pure JS reduction over a date-desc query. At fleet-of-60-vans scale
+ * this is cheap; if it ever gets slow we can swap in a SQL DISTINCT ON.
+ */
+export const getMostRecentDriverByVehicle = cache(
+  async (beforeDate: string): Promise<Map<string, string>> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("daily_roster")
+      .select("vehicle_id, driver_id, date")
+      .lt("date", beforeDate)
+      .order("date", { ascending: false });
+    if (error) {
+      console.error("getMostRecentDriverByVehicle failed:", error);
+      return new Map();
+    }
+    const m = new Map<string, string>();
+    for (const r of (data ?? []) as {
+      vehicle_id: string;
+      driver_id: string;
+    }[]) {
+      if (!m.has(r.vehicle_id)) m.set(r.vehicle_id, r.driver_id);
+    }
+    return m;
+  },
+);
+
+/**
  * Most recent date before `before` that has any roster rows. Used by
  * the "Copy from yesterday" button — handles weekends/skipped days
  * cleanly by finding the actual prior working day, not just "date - 1".

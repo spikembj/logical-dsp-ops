@@ -56,6 +56,7 @@ export function DailyRoster({
   vehicles,
   canWrite,
   prevDate,
+  lastDriverByVehicle,
 }: {
   date: string;
   roster: DailyRosterEntry[];
@@ -64,6 +65,8 @@ export function DailyRoster({
   vehicles: VehiclePick[];
   canWrite: boolean;
   prevDate: string | null;
+  /** vehicle_id → most-recently-assigned driver_id (from any prior day). */
+  lastDriverByVehicle: Record<string, string>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -187,6 +190,7 @@ export function DailyRoster({
                   idToName={idToName}
                   rosteredDriverIds={rosteredDriverIds}
                   canWrite={canWrite}
+                  suggestedDriverId={lastDriverByVehicle[v.id] ?? null}
                 />
               ))
             )}
@@ -216,6 +220,7 @@ function VanRow({
   idToName,
   rosteredDriverIds,
   canWrite,
+  suggestedDriverId,
 }: {
   date: string;
   vehicle: VehiclePick;
@@ -226,13 +231,27 @@ function VanRow({
   idToName: Map<string, string>;
   rosteredDriverIds: Set<string>;
   canWrite: boolean;
+  suggestedDriverId: string | null;
 }) {
   const router = useRouter();
   const [entryId, setEntryId] = useState<string | null>(entry?.id ?? null);
 
-  const [driverName, setDriverName] = useState(
-    entry?.driver_id ? (idToName.get(entry.driver_id) ?? "") : "",
-  );
+  // Prefill rule: if no entry today AND there's a prior driver for this
+  // van AND that driver isn't already assigned to a different van today,
+  // suggest them. User just needs to pick a wave to commit. They can
+  // overwrite by typing a different name or clear with the X. Waves are
+  // NOT remembered — dispatcher told us to forget the waves.
+  const initialDriverName = (() => {
+    if (entry?.driver_id) {
+      return idToName.get(entry.driver_id) ?? "";
+    }
+    if (suggestedDriverId && !rosteredDriverIds.has(suggestedDriverId)) {
+      return idToName.get(suggestedDriverId) ?? "";
+    }
+    return "";
+  })();
+
+  const [driverName, setDriverName] = useState(initialDriverName);
   const [wave, setWave] = useState<string>(
     entry?.wave !== undefined ? String(entry.wave) : "",
   );
