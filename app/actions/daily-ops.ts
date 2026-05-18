@@ -666,7 +666,6 @@ export async function upsertDutyItem(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/duties");
-  revalidatePath("/admin/duties");
   revalidatePath("/daily/eod");
   return { ok: true };
 }
@@ -691,7 +690,6 @@ export async function deleteDutyItem(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/duties");
-  revalidatePath("/admin/duties");
   revalidatePath("/daily/eod");
   return { ok: true };
 }

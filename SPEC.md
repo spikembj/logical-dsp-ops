@@ -516,15 +516,14 @@ Recurring tasks the dispatch team works through each shift / week / month. Caden
 
 **Daily** can be back-dated via `?date=` for late evening writes ("yesterday's duties"). **Weekly** and **monthly** stay on the current period — looking at past completions is a future feature.
 
-Per-section progress counts in each group header (e.g. "Preload out · 7 / 10").
+Per-section progress counts in each group header (e.g. "Preload out · 7 / 10"). Owner chips are color-coded (Dispatcher = sky, Assistant = violet, Michael = emerald, Barzin = amber, anything else = muted) — quick visual for "who's supposed to do this."
 
-### 16. Duties admin (`/admin/duties`)
-Management-only. CRUD over the duties template. Tabs for daily / weekly / monthly; each item gets a row with description, owner, sort order, active toggle, edit, delete. **Delete cascades** to historical completions for that item (drops the check history). To hide an item without losing history, toggle Active off — the item disappears from `/duties` but its historical completions remain queryable.
+**Inline template editing for management.** Each section ends with an "+ Add task" footer that opens an inline form (description + owner) to append a new item with sort order one bump past the section's last. Every row gets a trash icon for delete (cascades to that item's completion history). No separate admin page — `/duties` IS the editor when you're management.
 
-### 17. Wave times admin (`/admin/waves`)
+### 16. Wave times admin (`/admin/waves`)
 Management-only. Add / edit / delete waves. The seed migration ships the current 8 waves (1=09:50 … 8=10:30); Amazon shuffles these maybe twice a year, and the dispatcher updates them here without a code deploy. Inactive flag hides a wave from the picker without breaking historical roster rows that still reference it. Delete is blocked when any roster row references the wave (use Inactive instead).
 
-### 18. Shops admin (`/admin/shops`)
+### 17. Shops admin (`/admin/shops`)
 Management-only. Edit the list of values that show up in each van's **Current shop / location** dropdown on the Fleet page. Sort order controls picker order; Active toggles visibility without losing the records. Delete is safe — vans pointing to the shop get cleared (`ON DELETE SET NULL`).
 
 ## Build Order
@@ -544,7 +543,7 @@ Management-only. Edit the list of values that show up in each van's **Current sh
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
 10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
-11. ✅ Phase 2.5 — **Daily Ops** (all 5 passes shipped). Pass A: `wave_times` + `daily_roster` tables · van-first inline `/daily` roster · `/daily/paper` print · `/admin/waves`. Pass B: `vehicle_shops` + FK on vehicles.current_shop_id · `/admin/shops` · managed shop dropdown. Pass C: `daily_report` + `vehicle_issues.source` · `/daily/eod` form with auto-save + per-van notes that flow into the issues tracker · grounding auto-issues tagged `source='grounding_auto'`. Pass D: extend `coaching_sessions.category` with 11 policy-point categories · Topic input merged into the Category dropdown · 9th import tab "Policy Points (CSV)" with one-off 90-day backfill. Pass E: `duties_template_items` + `duties_completion` tables · `/duties` checklist with daily/weekly/monthly cadence tabs and optimistic checkbox UI · `/admin/duties` template editor · EOD form's duties summary card populated with X/Y per-group counts.
+11. ✅ Phase 2.5 — **Daily Ops** (all 5 passes shipped). Pass A: `wave_times` + `daily_roster` tables · van-first inline `/daily` roster · `/daily/paper` print · `/admin/waves`. Pass B: `vehicle_shops` + FK on vehicles.current_shop_id · `/admin/shops` · managed shop dropdown. Pass C: `daily_report` + `vehicle_issues.source` · `/daily/eod` form with auto-save + per-van notes that flow into the issues tracker · grounding auto-issues tagged `source='grounding_auto'`. Pass D: extend `coaching_sessions.category` with 11 policy-point categories · Topic input merged into the Category dropdown · 9th import tab "Policy Points (CSV)" with one-off 90-day backfill. Pass E: `duties_template_items` + `duties_completion` tables · `/duties` checklist with daily/weekly/monthly cadence tabs, optimistic checkbox UI, color-coded owner chips, and inline template editing (add at bottom of each section, delete per row) for management · EOD form's duties summary card populated with X/Y per-group counts.
 
 ## Audit & Data Integrity Rules
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, Settings } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth/require-role";
 import { isManagement, type UserRole } from "@/lib/types/database";
 import { formatSessionDate, todayIso } from "@/lib/format/dates";
@@ -20,7 +20,9 @@ interface PageProps {
  * monthly to this month. Dispatchers + management can tick items.
  *
  * Items reset each period — last week's checks don't carry over.
- * Template is editable at /admin/duties (management only).
+ * Template is editable inline on this page (management only) — add a
+ * task via the footer of each section, delete via the trash icon on
+ * each row.
  */
 export default async function DutiesPage({ searchParams }: PageProps) {
   const me = await requireUser();
@@ -63,24 +65,13 @@ export default async function DutiesPage({ searchParams }: PageProps) {
             {items.filter((i) => i.completion).length}/{items.length} done
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <Link
-            href="/daily"
-            className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back to Daily Ops
-          </Link>
-          {canManage && (
-            <Link
-              href="/admin/duties"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted transition-colors"
-            >
-              <Settings className="h-4 w-4" />
-              Edit list
-            </Link>
-          )}
-        </div>
+        <Link
+          href="/daily"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back to Daily Ops
+        </Link>
       </div>
 
       {/* Cadence tabs */}
@@ -106,6 +97,7 @@ export default async function DutiesPage({ searchParams }: PageProps) {
         periodKey={periodKey}
         items={items}
         canWrite={canWrite}
+        canManage={canManage}
       />
     </div>
   );

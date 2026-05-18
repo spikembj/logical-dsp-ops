@@ -266,7 +266,7 @@ Plus all prior migrations from previous HANDOFF.
 - **Pass B:** `vehicle_shops` + FK + `/admin/shops` + managed dropdown
 - **Pass C:** `/daily/eod` form + per-van notes flowing into vehicle_issues with `source='eod'`
 - **Pass D:** 11 new coaching categories + Topic merged into Category dropdown + Policy Points CSV one-off backfill
-- **Pass E:** `/duties` checklist with daily/weekly/monthly cadence tabs + optimistic checkbox UI + `/admin/duties` template editor + EOD form's duties summary card populated
+- **Pass E:** `/duties` checklist with daily/weekly/monthly cadence tabs + optimistic checkbox UI + color-coded owner chips + inline template editing (add at bottom of each section, delete per row — management only) + EOD form's duties summary card populated. Single page; no separate admin route.
 
 ### Phase 3 (user-flagged)
 - **HR / hiring.** Onboarding, document expiry, training certs.

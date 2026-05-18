@@ -348,9 +348,9 @@ export function EodForm({
         </div>
         {dutiesSummary.total === 0 ? (
           <p className="text-xs text-muted-foreground">
-            No daily duties configured. Add some at{" "}
-            <Link href="/admin/duties" className="underline-offset-2 hover:underline">
-              Manage → Duties
+            No daily duties configured. Add some on the{" "}
+            <Link href="/duties" className="underline-offset-2 hover:underline">
+              Duties checklist
             </Link>
             .
           </p>

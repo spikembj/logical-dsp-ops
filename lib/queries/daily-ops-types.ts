@@ -132,6 +132,34 @@ export const DUTIES_GROUP_ORDER: NonNullable<DutiesGroup>[] = [
 ];
 
 /**
+ * Tailwind color classes for owner chips on the duties checklist. The
+ * map covers the four roles/people we expect day-one; anything else
+ * falls back to the neutral muted chip. Adding new colors is a
+ * one-liner here — no schema change needed.
+ *
+ * Picked palettes that survive both light and dark mode without
+ * looking washed out, and that read as "different roles" rather than
+ * "different severity levels" (so no red/amber).
+ */
+export const DUTIES_OWNER_CHIP_CLASSES: Record<string, string> = {
+  Dispatcher:
+    "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
+  Assistant:
+    "bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200",
+  Michael:
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200",
+  Barzin:
+    "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+};
+
+export const DUTIES_OWNER_CHIP_DEFAULT =
+  "bg-muted text-muted-foreground";
+
+export function chipClassForOwner(owner: string): string {
+  return DUTIES_OWNER_CHIP_CLASSES[owner] ?? DUTIES_OWNER_CHIP_DEFAULT;
+}
+
+/**
  * Compute the period key for a given date + cadence.
  * Daily: YYYY-MM-DD.
  * Weekly: YYYY-Www (ISO week). Weeks start Monday — matches the
