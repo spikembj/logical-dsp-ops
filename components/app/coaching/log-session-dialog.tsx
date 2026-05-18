@@ -94,7 +94,6 @@ export function LogSessionDialog(props: Props) {
     ? {
         sessionDate: props.session.session_date,
         sessionType: props.session.session_type,
-        topic: props.session.topic,
         notes: props.session.notes ?? "",
         acknowledged: props.session.acknowledged,
         category: props.session.category,
@@ -103,7 +102,6 @@ export function LogSessionDialog(props: Props) {
         sessionDate: todayIso(),
         sessionType:
           prefill?.session_type ?? ("discussion" as CoachingSessionType),
-        topic: prefill?.topic ?? "",
         notes: prefill?.notes ?? "",
         acknowledged: false,
         category: prefill?.category ?? ("other" as CoachingCategory),
@@ -113,7 +111,6 @@ export function LogSessionDialog(props: Props) {
   const [sessionType, setSessionType] = useState<CoachingSessionType>(
     initial.sessionType,
   );
-  const [topic, setTopic] = useState(initial.topic);
   const [notes, setNotes] = useState(initial.notes);
   const [acknowledged, setAcknowledged] = useState(initial.acknowledged);
   const [category, setCategory] = useState<CoachingCategory>(initial.category);
@@ -121,7 +118,6 @@ export function LogSessionDialog(props: Props) {
   function reset() {
     setSessionDate(initial.sessionDate);
     setSessionType(initial.sessionType);
-    setTopic(initial.topic);
     setNotes(initial.notes);
     setAcknowledged(initial.acknowledged);
     setCategory(initial.category);
@@ -129,10 +125,12 @@ export function LogSessionDialog(props: Props) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!topic.trim()) {
-      toast.error("Topic is required.");
-      return;
-    }
+    // Topic was merged into Category — derive a display-friendly topic
+    // from the picked category. "Other" stays generic; notes carry the
+    // specifics. Existing sessions with custom topic strings keep
+    // displaying their original topic — only new + edited rows pick up
+    // this derived value.
+    const derivedTopic = COACHING_CATEGORY_LABELS[category];
 
     startTransition(async () => {
       const res = isEdit
@@ -141,7 +139,7 @@ export function LogSessionDialog(props: Props) {
             driver_id: props.driverId,
             session_date: sessionDate,
             session_type: sessionType,
-            topic: topic.trim(),
+            topic: derivedTopic,
             notes: notes.trim() || null,
             category,
           })
@@ -149,7 +147,7 @@ export function LogSessionDialog(props: Props) {
             driver_id: props.driverId,
             session_date: sessionDate,
             session_type: sessionType,
-            topic: topic.trim(),
+            topic: derivedTopic,
             notes: notes.trim() || null,
             acknowledged,
             category,
@@ -246,19 +244,7 @@ export function LogSessionDialog(props: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="topic">Topic</Label>
-            <Input
-              id="topic"
-              required
-              maxLength={200}
-              placeholder="e.g. Hard braking on 7-Eleven route"
-              value={topic}
-              onChange={(e) => setTopic(e.currentTarget.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category">Topic / Category</Label>
             <select
               id="category"
               value={category}
@@ -278,9 +264,11 @@ export function LogSessionDialog(props: Props) {
               ))}
             </select>
             <p className="text-[10px] text-muted-foreground">
-              Trigger-clearing categories remove the matching driver from
-              the needs-coaching list. Policy categories are descriptive
-              labels for write-ups.
+              Pick the closest fit. <strong>Trigger-clearing</strong>
+              {" "}options remove the driver from the matching
+              needs-coaching list. <strong>Policy point</strong> options
+              are descriptive labels for write-ups. <strong>Other</strong>
+              {" "}is the catch-all — use Notes below to explain.
             </p>
           </div>
 
