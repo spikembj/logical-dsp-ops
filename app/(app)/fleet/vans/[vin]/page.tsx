@@ -6,6 +6,7 @@ import {
   listVehicleIssues,
   listVehicleParts,
   listPaveInspectionsForVehicle,
+  listVehicleShops,
 } from "@/lib/queries/fleet";
 import { VehicleDetail } from "@/components/app/fleet/vehicle-detail";
 import { VehicleQrButton } from "@/components/app/fleet/vehicle-qr-button";
@@ -20,10 +21,11 @@ export default async function VanDetailPage({
   const vehicle = await getVehicleByVin(vin);
   if (!vehicle) notFound();
 
-  const [issues, parts, paveInspections] = await Promise.all([
+  const [issues, parts, paveInspections, shops] = await Promise.all([
     listVehicleIssues(vehicle.id),
     listVehicleParts(vehicle.id),
     listPaveInspectionsForVehicle(vehicle.id),
+    listVehicleShops(),
   ]);
 
   return (
@@ -56,6 +58,7 @@ export default async function VanDetailPage({
         issues={issues}
         parts={parts}
         paveInspections={paveInspections}
+        shops={shops}
       />
     </div>
   );

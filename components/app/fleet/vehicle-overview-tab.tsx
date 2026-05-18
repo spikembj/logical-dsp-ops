@@ -26,6 +26,7 @@ import {
   formatQuarter,
   type PaveInspectionRow,
   type VehicleRow,
+  type VehicleShop,
 } from "@/lib/queries/fleet-types";
 import { PaveDialog } from "./pave-tile";
 import { Trash2 } from "lucide-react";
@@ -56,13 +57,15 @@ function getAmazonStatus(
 export function VehicleOverviewTab({
   vehicle,
   paveInspections,
+  shops,
 }: {
   vehicle: VehicleRow;
   paveInspections: PaveInspectionRow[];
+  shops: VehicleShop[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [shop, setShop] = useState(vehicle.current_shop_location ?? "");
+  const [shopId, setShopId] = useState<string>(vehicle.current_shop_id ?? "");
   const [eod, setEod] = useState(vehicle.eod_parking_location ?? "");
   const [notes, setNotes] = useState(vehicle.notes ?? "");
 
@@ -80,7 +83,7 @@ export function VehicleOverviewTab({
     startTransition(async () => {
       const res = await updateVehicleLocalFields({
         vehicle_id: vehicle.id,
-        current_shop_location: shop || null,
+        current_shop_id: shopId || null,
         eod_parking_location: eod || null,
         notes: notes || null,
       });
@@ -130,13 +133,26 @@ export function VehicleOverviewTab({
           These fields are yours — never touched by Vehicles imports.
         </p>
         <div className="space-y-2">
-          <Label htmlFor="shop">Current shop</Label>
-          <Input
+          <Label htmlFor="shop">Current shop / location</Label>
+          <select
             id="shop"
-            value={shop}
-            onChange={(e) => setShop(e.currentTarget.value)}
-            placeholder="e.g. Crash Champions"
-          />
+            value={shopId}
+            onChange={(e) => setShopId(e.currentTarget.value)}
+            className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <option value="">— None —</option>
+            {shops
+              .filter((s) => s.active || s.id === vehicle.current_shop_id)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                  {!s.active ? " (inactive)" : ""}
+                </option>
+              ))}
+          </select>
+          <p className="text-[10px] text-muted-foreground">
+            Manage the list at <a href="/admin/shops" className="underline-offset-2 hover:underline">Manage → Shops</a>.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="eod">EOD parking spot</Label>

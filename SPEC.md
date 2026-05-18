@@ -221,7 +221,7 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 > **Re-import merge rule:** if `operational_status_source = 'amazon'`, overwrite the status normally. If `source = 'manual'`, leave the status alone but still update `raw_data` so the van detail page can render "Amazon currently reports OPERATIONAL — clear override?" The override clears when you click "Use Amazon's value," which sets source back to `amazon` and applies the latest imported value.
 
 **Locally-managed columns** (untouched by imports):
-- `current_shop_location` (text, nullable) — which shop the van is at right now
+- `current_shop_id` (uuid FK → vehicle_shops, nullable) — which shop / location the van is at right now. UI picks from the editable `vehicle_shops` list (see below). Old free-text `current_shop_location` column is deprecated but kept around for one cycle after the FK migration so any unmatched values aren't lost.
 - `eod_parking_location` (text, nullable) — where it parks overnight on the lot
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
@@ -252,6 +252,13 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `ordered_at`, `received_at` (timestamptz, nullable)
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
+
+### `vehicle_shops`
+**Editable lookup of "where a van is right now".** Backs the dropdown on each van's Overview card. Intentionally mixes real shop names (Jiffy Lube, Bountiful Ram Dealer) with locations (LGCL Parking Lot, DUT4) and quasi-statuses (Inactive, Return, Returned, In Use) — matches the dispatcher's existing spreadsheet column.
+- `id` (uuid, PK), `name` (text, unique), `sort_order` (int, default 100), `active` (bool, default true)
+- `created_at`, `updated_at`
+- RLS: read for active users, write for management.
+- `vehicles.current_shop_id` references this; ON DELETE SET NULL — deleting a shop clears it off every van that pointed to it.
 
 ### `wave_times`
 **Editable lookup of Amazon wave numbers → show times.** Used by the Daily Ops roster picker and joined into the dispatch sheet for display. Seeded with 8 waves (1=09:50 … 8=10:30); Amazon re-times them ~twice a year. Management edits via `/admin/waves`.
@@ -413,7 +420,7 @@ Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickab
 - **Open issues** — distinct vans with any `vehicle_issues.status` in (`open`, `in_shop`).
 
 **Hero lists:**
-- **In the shop** — grouped by `current_shop_location`, with per-shop van count and a chevron to expand the list. Vans with no shop set don't appear here.
+- **In the shop** — grouped by `current_shop_name` (joined from `vehicle_shops`), with per-shop van count and a chevron to expand the list. Vans with no shop set don't appear here.
 - **Open issues** — most recent first, grouped by van. Severity badge per row. Per-row inline `Resolve` action (opens the issue dialog in resolve mode).
 
 **Registration roster** — sortable table, defaults to ascending `registration_expiry_date`. Red chip for expired or <30 days, yellow for 30–60 days, green for >60 days. Click a row to jump to the van detail page.
@@ -429,7 +436,7 @@ Per-row click: link to detail page. Inline QR icon: opens the QR modal directly 
 Header strip: van name, license plate, operational status badge (with manual-override pill + tooltip showing the manual note when source=manual), ownership chip (Owned / Rental / Leased), service tier. A **QR** button in the header opens a modal with a large SVG QR (encoding the plain VIN text), plus Print and Download SVG actions.
 
 Tabs:
-- **Overview** — all Amazon-managed fields read-only. Locally-managed fields (`current_shop_location`, `eod_parking_location`, `notes`) editable inline. The operational-status widget is its own card: dropdown to override, optional `manual_status_note` input, and — when the local value differs from Amazon's latest imported value — a callout reading *"Amazon currently reports {operational_status} — use Amazon's value"* with a clear-override button. Setting the dropdown back to Amazon's value (or clicking the callout) flips `operational_status_source` back to `amazon`.
+- **Overview** — all Amazon-managed fields read-only. Locally-managed fields: **current shop / location** as a dropdown over the editable `vehicle_shops` list (manage at `/admin/shops`), plus `eod_parking_location` and `notes` as free text editable inline. The operational-status widget is its own card: dropdown to override, optional `manual_status_note` input, and — when the local value differs from Amazon's latest imported value — a callout reading *"Amazon currently reports {operational_status} — use Amazon's value"* with a clear-override button. Setting the dropdown back to Amazon's value (or clicking the callout) flips `operational_status_source` back to `amazon`.
 - **Issues** — chronological list (most recent first). "Log new issue" button at top. Per-row Resolve / Edit / Close-without-repair actions. Auto-created issues show an "Auto" badge so it's clear they came from a grounding event. Filter: Open / In shop / All. `photo_urls` slot is wired but the UI is hidden (Phase 3).
 - **Parts** — chronological list. "Order part" button. Per-row quantity ledger (ordered / received / installed). Optional link badge to the issue the part is for. Per-row inline `Receive`, `Install`, `Return` actions update the matching quantities (and derive the new `status`). Filter: Open (needed/ordered/partial) / All.
 - **History** — derived audit trail: registration-expiry changes, operational-status flips (with source), import touches, manual edits to local fields. Built from a simple `vehicle_history` table populated by triggers. Low priority — defer to a polish pass if it slips.
@@ -466,6 +473,9 @@ Printable view of the roster. Server-rendered, minimal CSS, optimized for letter
 ### 14. Wave times admin (`/admin/waves`)
 Management-only. Add / edit / delete waves. The seed migration ships the current 8 waves (1=09:50 … 8=10:30); Amazon shuffles these maybe twice a year, and the dispatcher updates them here without a code deploy. Inactive flag hides a wave from the picker without breaking historical roster rows that still reference it. Delete is blocked when any roster row references the wave (use Inactive instead).
 
+### 15. Shops admin (`/admin/shops`)
+Management-only. Edit the list of values that show up in each van's **Current shop / location** dropdown on the Fleet page. Sort order controls picker order; Active toggles visibility without losing the records. Delete is safe — vans pointing to the shop get cleared (`ON DELETE SET NULL`).
+
 ## Build Order
 
 1. ✅ Project setup, Supabase, auth, role-based middleware.
@@ -483,7 +493,7 @@ Management-only. Add / edit / delete waves. The seed migration ships the current
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
 10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
-11. 🚧 Phase 2.5 — **Daily Ops** (Pass A shipped, B-E pending). Pass A: `wave_times` + `daily_roster` tables · `is_operations()` helper for dispatcher write access · `/daily` dashboard with inline-editable roster + date nav + "Copy from {prev date}" seed · `/daily/paper` print view · `/admin/waves` wave-times CRUD · sidebar entry. Pending passes: B = shop dropdown for Fleet, C = end-of-day report, D = policy point categories on `coaching_sessions` + 90-day backfill, E = duties checklist (daily/weekly/monthly templates with completion tracking).
+11. 🚧 Phase 2.5 — **Daily Ops** (Pass A + B shipped, C-E pending). Pass A: `wave_times` + `daily_roster` tables · `is_operations()` helper · van-first inline-editable `/daily` roster with autocomplete + autosave + driver prefill from last assignment per van · `/daily/paper` print view · `/admin/waves` wave-times CRUD · sidebar entry. Pass B: `vehicle_shops` table + seed of 19 values · `vehicles.current_shop_id` FK with backfill from the deprecated text column · `/admin/shops` CRUD · van Overview's "Current shop" replaced with a managed dropdown. Pending passes: C = end-of-day report, D = policy point categories on `coaching_sessions` + 90-day backfill, E = duties checklist (daily/weekly/monthly templates with completion tracking).
 
 ## Audit & Data Integrity Rules
 

@@ -29,11 +29,35 @@ export { daysUntilExpiry } from "./fleet-types";
 
 const OPEN_ISSUE_STATUSES: VehicleIssueStatus[] = ["open", "in_shop"];
 
+/**
+ * Map a Supabase row (which still has the deprecated current_shop_location
+ * text column + a joined vehicle_shops object) into our VehicleRow shape
+ * that only exposes the FK-resolved name. Centralized here so listVehicles
+ * and getVehicleByVin can both use it.
+ */
+type SupabaseVehicleJoinedRow = Omit<
+  VehicleRow,
+  "current_shop_name" | "current_shop_id"
+> & {
+  current_shop_id: string | null;
+  vehicle_shops: { name: string } | null;
+};
+
+function mapVehicleRow(r: SupabaseVehicleJoinedRow): VehicleRow {
+  return {
+    ...r,
+    current_shop_id: r.current_shop_id,
+    current_shop_name: r.vehicle_shops?.name ?? null,
+  };
+}
+
+const VEHICLE_SELECT = "*, vehicle_shops (name)";
+
 /** All vehicles + their open-issue counts, sorted by vehicle_name. */
 export const listVehicles = cache(async (): Promise<VehicleListItem[]> => {
   const supabase = await createClient();
   const [vehiclesRes, issuesRes] = await Promise.all([
-    supabase.from("vehicles").select("*").order("vehicle_name"),
+    supabase.from("vehicles").select(VEHICLE_SELECT).order("vehicle_name"),
     supabase
       .from("vehicle_issues")
       .select("vehicle_id, status")
@@ -47,8 +71,10 @@ export const listVehicles = cache(async (): Promise<VehicleListItem[]> => {
   for (const i of (issuesRes.data ?? []) as { vehicle_id: string }[]) {
     openByVehicle.set(i.vehicle_id, (openByVehicle.get(i.vehicle_id) ?? 0) + 1);
   }
-  return ((vehiclesRes.data ?? []) as VehicleRow[]).map((v) => ({
-    ...v,
+  return (
+    (vehiclesRes.data ?? []) as unknown as SupabaseVehicleJoinedRow[]
+  ).map((v) => ({
+    ...mapVehicleRow(v),
     open_issues_count: openByVehicle.get(v.id) ?? 0,
   }));
 });
@@ -95,7 +121,7 @@ export const getFleetDashboardData = cache(
       }
       if (v.open_issues_count > 0) totals.open_issues_distinct_vehicles++;
 
-      const shop = v.current_shop_location?.trim();
+      const shop = v.current_shop_name?.trim();
       if (shop) {
         const list = byShop.get(shop) ?? [];
         list.push(v);
@@ -130,16 +156,34 @@ export const getVehicleByVin = cache(
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("vehicles")
-      .select("*")
+      .select(VEHICLE_SELECT)
       .eq("vin", vin)
       .maybeSingle();
     if (error) {
       console.error("getVehicleByVin failed:", error);
       return null;
     }
-    return (data as VehicleRow) ?? null;
+    if (!data) return null;
+    return mapVehicleRow(data as unknown as SupabaseVehicleJoinedRow);
   },
 );
+
+/** All vehicle shops, ordered by sort_order then name. */
+export const listVehicleShops = cache(async () => {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("vehicle_shops")
+    .select("*")
+    .order("sort_order")
+    .order("name");
+  if (error) {
+    console.error("listVehicleShops failed:", error);
+    return [];
+  }
+  // Type from fleet-types.
+  type Row = import("./fleet-types").VehicleShop;
+  return (data ?? []) as Row[];
+});
 
 export const listVehicleIssues = cache(
   async (vehicleId: string): Promise<VehicleIssueRow[]> => {

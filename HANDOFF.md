@@ -223,6 +223,9 @@ has been run against the live DB). New since the previous HANDOFF:
                 quarter/year sync trigger)
 20260518002930  daily_ops_phase_a (wave_times + daily_roster +
                 is_operations() helper + RLS + seed 8 waves)
+20260518033735  vehicle_shops (table + seed of 19 values + FK on
+                vehicles.current_shop_id + case-insensitive backfill
+                from deprecated current_shop_location text column)
 ```
 
 Plus all prior migrations from previous HANDOFF.
@@ -249,14 +252,15 @@ Plus all prior migrations from previous HANDOFF.
 - **Fleet history tab** on van detail was explicitly deferred from
   Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2.5 — Daily Ops (Pass A shipped, B-E pending)
-Pass A live: `/daily` roster + `/daily/paper` print + `/admin/waves`.
+### Phase 2.5 — Daily Ops (Passes A + B shipped, C-E pending)
+Pass A live: `/daily` roster (van-first inline editor with autocomplete
++ autosave + per-van driver prefill) + `/daily/paper` print +
+`/admin/waves`.
+Pass B live: `vehicle_shops` table + seed of 19 values · FK on
+`vehicles.current_shop_id` with backfill from the deprecated text
+column · `/admin/shops` CRUD · van Overview "Current shop / location"
+is now a managed dropdown instead of free text.
 Remaining passes scoped + agreed:
-  - **Pass B** — shop dropdown for Fleet. New `vehicle_shops` table +
-    small CRUD; van detail Overview's "Current shop" becomes a Select
-    over the shop list rather than free text. Seed list from user's
-    screenshot (Jiffy Lube / Goodyear / Rivian Dealer / Bountiful Ram
-    Dealer / etc. — about 18 entries).
   - **Pass C** — end-of-day report. Per-date row capturing route
     counts (total / reduced / recycled / ad-hocs), dispatcher names,
     drivers staying after 8pm, injuries/incidents free text, camera

@@ -9,6 +9,7 @@ import {
   type VehicleIssueRow,
   type VehiclePartRow,
   type PaveInspectionRow,
+  type VehicleShop,
 } from "@/lib/queries/fleet-types";
 import { VehicleOverviewTab } from "./vehicle-overview-tab";
 import { VehicleIssuesTab } from "./vehicle-issues-tab";
@@ -19,11 +20,13 @@ export function VehicleDetail({
   issues,
   parts,
   paveInspections,
+  shops,
 }: {
   vehicle: VehicleRow;
   issues: VehicleIssueRow[];
   parts: VehiclePartRow[];
   paveInspections: PaveInspectionRow[];
+  shops: VehicleShop[];
 }) {
   const [tab, setTab] = useState<"overview" | "issues" | "parts">("overview");
   const openIssuesCount = issues.filter(
@@ -95,6 +98,7 @@ export function VehicleDetail({
           <VehicleOverviewTab
             vehicle={vehicle}
             paveInspections={paveInspections}
+            shops={shops}
           />
         </TabsContent>
         <TabsContent value="issues" className="mt-4">

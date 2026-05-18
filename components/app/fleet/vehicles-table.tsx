@@ -47,7 +47,7 @@ export function VehiclesTable({ vehicles }: { vehicles: VehicleListItem[] }) {
         return false;
       if (filter === "grounded" && v.operational_status === "operational")
         return false;
-      if (filter === "in_shop" && !v.current_shop_location) return false;
+      if (filter === "in_shop" && !v.current_shop_name) return false;
       if (filter === "open_issues" && v.open_issues_count === 0) return false;
       if (filter === "reg_soon") {
         const d = daysUntilExpiry(v.registration_expiry_date);
@@ -169,7 +169,7 @@ export function VehiclesTable({ vehicles }: { vehicles: VehicleListItem[] }) {
                       />
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm">
-                      {v.current_shop_location ?? (
+                      {v.current_shop_name ?? (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>

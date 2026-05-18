@@ -32,7 +32,7 @@ function fail(issues: z.ZodError["issues"]): ActionResult {
 // ---------------------------------------------------------------------------
 const UpdateLocalSchema = z.object({
   vehicle_id: z.string().uuid(),
-  current_shop_location: NullableTrim,
+  current_shop_id: z.string().uuid().nullable().optional(),
   eod_parking_location: NullableTrim,
   notes: NullableTrim,
 });
@@ -48,10 +48,77 @@ export async function updateVehicleLocalFields(
   const { vehicle_id, ...patch } = parsed.data;
   const { error } = await supabase
     .from("vehicles")
-    .update(patch)
+    .update({
+      ...patch,
+      current_shop_id: parsed.data.current_shop_id ?? null,
+    })
     .eq("id", vehicle_id);
   if (error) return { ok: false, error: error.message };
 
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// vehicle_shops CRUD (management only)
+// ---------------------------------------------------------------------------
+const UpsertShopSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "Name is required").max(120),
+  sort_order: z.number().int().min(0).max(10_000).optional(),
+  active: z.boolean().default(true),
+});
+
+export async function upsertVehicleShop(
+  input: z.infer<typeof UpsertShopSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = UpsertShopSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const payload: Record<string, unknown> = {
+    name: parsed.data.name,
+    active: parsed.data.active,
+  };
+  if (parsed.data.sort_order !== undefined)
+    payload.sort_order = parsed.data.sort_order;
+  if (parsed.data.id) payload.id = parsed.data.id;
+
+  const { error } = await supabase
+    .from("vehicle_shops")
+    .upsert(payload, { onConflict: "id" });
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "A shop with that name already exists." };
+    }
+    return { ok: false, error: error.message };
+  }
+  revalidatePath("/admin/shops");
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}
+
+const DeleteShopSchema = z.object({ shop_id: z.string().uuid() });
+
+export async function deleteVehicleShop(
+  input: z.infer<typeof DeleteShopSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = DeleteShopSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  // FK on vehicles.current_shop_id is ON DELETE SET NULL, so this is safe
+  // even when vans currently point at the shop — they just clear out.
+  const { error } = await supabase
+    .from("vehicle_shops")
+    .delete()
+    .eq("id", parsed.data.shop_id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/shops");
   revalidatePath("/fleet");
   revalidatePath("/fleet/vans");
   return { ok: true };

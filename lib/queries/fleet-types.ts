@@ -40,11 +40,23 @@ export interface VehicleRow {
   operational_status_changed_by: string | null;
   status_reason_message: string | null;
   manual_status_note: string | null;
-  current_shop_location: string | null;
+  /** Resolved name from the vehicle_shops join; null if no shop set. */
+  current_shop_name: string | null;
+  /** FK target — used when updating via the dropdown. */
+  current_shop_id: string | null;
   eod_parking_location: string | null;
   notes: string | null;
   raw_data: Record<string, unknown> | null;
   imported_from: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VehicleShop {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
   created_at: string;
   updated_at: string;
 }
