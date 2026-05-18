@@ -437,21 +437,22 @@ Sidebar label is **Management**. Owner-tier admins invite teammates by email (Su
 **Per-row password-reset button** (key icon on the right) calls `sendPasswordReset` which uses the admin `generateLink('recovery', …)` API to email the teammate a recovery link. Confirms before sending. Used when someone forgets their password or an invite link expired (Supabase invite tokens are valid for 24h by default).
 
 ### 8. Fleet dashboard (`/fleet`)
-Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickable threshold tiles with popovers, hero lists, "no guesswork" surfaces). Scope is intentionally narrow — Amazon already owns PMs / DVIC / AVI / DOT / odometer defects / warning lights, and we do not duplicate any of it. This dashboard exists to fill the gaps Amazon's dashboard leaves: shop location, registration expiry warnings, our own minor-issue tracker, and parts-on-order visibility.
+Title: **Fleet**. Inherits the Performance dashboard's pattern language (clickable threshold tiles with popovers, hero lists, "no guesswork" surfaces). Scope is intentionally narrow — Amazon already owns PMs / DVIC / AVI / DOT / odometer defects / warning lights, and we do not duplicate any of it. This dashboard exists to fill the gaps Amazon's dashboard leaves: shop location, registration expiry warnings, our own minor-issue tracker, parts-on-order visibility, and PAVE compliance.
 
-**Header:** `Fleet — {N} vehicles · {N} operational · {N} grounded`
+**Header strip:** primary-blue action buttons (All vans · QR sheet · Shops [mgmt only]). No subtitle — the tiles below show the totals.
 
-**4 stat tiles**, each clickable to a dialog listing the matching vans:
-- **Operational** — count of vans with effective status `operational`.
-- **Grounded** — count of `grounded` + `ready_for_audit`.
-- **Registration expiring** — count expiring in next 60 days (already-expired included).
-- **Open issues** — distinct vans with any `vehicle_issues.status` in (`open`, `in_shop`).
+**3 stat tiles** across the top:
+- **Operational + Grounded** — a single dual-tile card with two clickable halves. Each opens its own popover (operational vans vs grounded/ready-for-audit vans).
+- **Registration expiring** — count expiring in next 60 days (already-expired included). Click for the list.
+- **Open issues** — distinct vans with any `vehicle_issues.status` in (`open`, `in_shop`). Click for the list.
 
 **Hero lists:**
 - **In the shop** — grouped by `current_shop_name` (joined from `vehicle_shops`), with per-shop van count and a chevron to expand the list. Vans with no shop set don't appear here.
 - **Open issues** — most recent first, grouped by van. Severity badge per row. Per-row inline `Resolve` action (opens the issue dialog in resolve mode).
 
-**Registration roster** — sortable table, defaults to ascending `registration_expiry_date`. Red chip for expired or <30 days, yellow for 30–60 days, green for >60 days. Click a row to jump to the van detail page.
+**Parts** — every `vehicle_parts` row across the fleet, joined with the van name. Open parts (`needed` / `ordered` / `partial`) always visible; `received` / `installed` / `returned` rows tucked behind a "Show N more" details toggle. Columns: Van / Part / Qty (smart breakdown like "2 installed · 1 on hand · 3 pending") / Status / Vendor / Ordered. Each van name links to that van's Parts tab.
+
+**PAVE tile** at the bottom — see §15.
 
 ### 9. Vehicle list (`/fleet/vans`)
 Searchable, sortable table. Columns: **Name / VIN / Plate / Make+Model / Service tier / Operational status** (with a small "manual" pill if `operational_status_source='manual'`) **/ Current shop / EOD location / Open issues count / Reg expiry**.
@@ -542,7 +543,7 @@ Management-only. Edit the list of values that show up in each van's **Current sh
 7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Employees page (CRUD with position + standard_parcel rename).
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
-10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
+10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (3 stat tiles incl. merged Op/Grounded dual-tile + shop-grouped hero + open-issues hero + fleet-wide parts list + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
 11. ✅ Phase 2.5 — **Daily Ops** (all 5 passes shipped). Pass A: `wave_times` + `daily_roster` tables · van-first inline `/daily` roster · `/daily/paper` print · `/admin/waves`. Pass B: `vehicle_shops` + FK on vehicles.current_shop_id · `/admin/shops` · managed shop dropdown. Pass C: `daily_report` + `vehicle_issues.source` · `/daily/eod` form with auto-save + per-van notes that flow into the issues tracker · grounding auto-issues tagged `source='grounding_auto'`. Pass D: extend `coaching_sessions.category` with 11 policy-point categories · Topic input merged into the Category dropdown · 9th import tab "Policy Points (CSV)" with one-off 90-day backfill. Pass E: `duties_template_items` + `duties_completion` tables · `/duties` checklist with daily/weekly/monthly cadence tabs, optimistic checkbox UI, color-coded owner chips, and inline template editing (add at bottom of each section, delete per row) for management · EOD form's duties summary card populated with X/Y per-group counts.
 
 ## Audit & Data Integrity Rules
