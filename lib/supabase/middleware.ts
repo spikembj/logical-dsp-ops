@@ -41,6 +41,11 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
+    // /set-password handles its own auth client-side. Supabase
+    // recovery/invite emails put tokens in the URL hash, which the
+    // middleware can't see — bouncing to /login here would lock out
+    // anyone clicking those links.
+    pathname.startsWith("/set-password") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 

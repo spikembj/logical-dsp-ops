@@ -1,40 +1,23 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { SetPasswordForm } from "./set-password-form";
+import { SetPasswordClient } from "./set-password-client";
 
 /**
  * Landing page for newly-invited users and password-recovery clicks.
  *
- * Flow: Supabase verifies the invite/recovery token, hands us back a
- * temporary session via /auth/callback, which forwards here via the
- * `next` query param. We confirm there's a logged-in user, then render
- * the form that calls `updateUser({ password })` to permanently set a
- * password on the account.
+ * The whole flow runs client-side because Supabase's invite/recovery
+ * emails use the implicit flow — tokens arrive in the URL hash
+ * (#access_token=…&refresh_token=…) which a server-side check
+ * can't see. The client component parses the hash, calls
+ * supabase.auth.setSession(), then renders the password form.
  *
- * If someone lands here without a session, send them to login.
+ * Also handles PKCE-flow links (?code=…) and the case where the user
+ * is already signed in (e.g. they want to change their password from
+ * a fresh tab) — same form, no session-setting needed.
  */
-export default async function SetPasswordPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/login");
-  }
-
+export default function SetPasswordPage() {
   return (
     <div className="w-full max-w-sm">
       <div className="rounded-2xl border bg-card text-card-foreground shadow-sm p-7 space-y-5">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">
-            Set your password
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Signed in as <span className="font-medium">{user.email}</span>.
-            Choose a password to finish setting up your account.
-          </p>
-        </div>
-        <SetPasswordForm />
+        <SetPasswordClient />
       </div>
     </div>
   );

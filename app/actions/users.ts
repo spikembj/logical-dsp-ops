@@ -23,10 +23,17 @@ async function siteOrigin(): Promise<string> {
   return process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 }
 
-/** Where Supabase should send invite / recovery clicks. */
+/**
+ * Where Supabase should send invite / recovery clicks. Sends them
+ * directly to /set-password (NOT through /auth/callback) because
+ * Supabase's recovery emails use the implicit flow — tokens arrive
+ * in the URL hash, which a server-side route handler can't see and
+ * would strip on redirect. The /set-password page is client-side
+ * and handles the hash itself.
+ */
 async function setPasswordRedirect(): Promise<string> {
   const origin = await siteOrigin();
-  return `${origin}/auth/callback?next=/set-password`;
+  return `${origin}/set-password`;
 }
 
 const RoleSchema = z.enum([
