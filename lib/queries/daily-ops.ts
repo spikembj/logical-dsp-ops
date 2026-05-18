@@ -5,6 +5,10 @@ import type {
   DailyReportRow,
   DailyRosterEntry,
   DailyRosterRow,
+  DutiesCadence,
+  DutiesCompletion,
+  DutiesItemWithCompletion,
+  DutiesTemplateItem,
   EodVanNote,
   WaveTime,
 } from "./daily-ops-types";
@@ -208,5 +212,121 @@ export const listEodNotesForDate = cache(
       vehicle_name: r.vehicles?.vehicle_name ?? r.vehicles?.vin ?? "?",
       vehicle_vin: r.vehicles?.vin ?? "",
     }));
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Duties checklist
+// ---------------------------------------------------------------------------
+
+/** All active duties items for a cadence, ordered for the UI. */
+export const listDutiesTemplate = cache(
+  async (cadence: DutiesCadence): Promise<DutiesTemplateItem[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("duties_template_items")
+      .select("*")
+      .eq("cadence", cadence)
+      .eq("active", true)
+      .order("group_label", { ascending: true, nullsFirst: false })
+      .order("sort_order")
+      .order("description");
+    if (error) {
+      console.error("listDutiesTemplate failed:", error);
+      return [];
+    }
+    return (data as DutiesTemplateItem[]) ?? [];
+  },
+);
+
+/** Every duties item (incl. inactive) — used by the template editor. */
+export const listAllDutiesTemplate = cache(
+  async (): Promise<DutiesTemplateItem[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("duties_template_items")
+      .select("*")
+      .order("cadence")
+      .order("group_label", { ascending: true, nullsFirst: false })
+      .order("sort_order")
+      .order("description");
+    if (error) {
+      console.error("listAllDutiesTemplate failed:", error);
+      return [];
+    }
+    return (data as DutiesTemplateItem[]) ?? [];
+  },
+);
+
+/**
+ * Get the active template + completion status for a cadence's current
+ * period (e.g. today for daily, this week for weekly).
+ */
+export const getDutiesForPeriod = cache(
+  async (
+    cadence: DutiesCadence,
+    periodKey: string,
+  ): Promise<DutiesItemWithCompletion[]> => {
+    const supabase = await createClient();
+    const [itemsRes, completionRes] = await Promise.all([
+      listDutiesTemplate(cadence),
+      supabase
+        .from("duties_completion")
+        .select("*")
+        .eq("period_key", periodKey),
+    ]);
+    if (completionRes.error) {
+      console.error("getDutiesForPeriod failed:", completionRes.error);
+      return itemsRes.map((i) => ({ ...i, completion: null }));
+    }
+    const byItem = new Map<string, DutiesCompletion>();
+    for (const c of (completionRes.data ?? []) as DutiesCompletion[]) {
+      byItem.set(c.template_item_id, c);
+    }
+    return itemsRes.map((i) => ({
+      ...i,
+      completion: byItem.get(i.id) ?? null,
+    }));
+  },
+);
+
+/**
+ * Compact summary for a given (cadence, period) — total items + how
+ * many are checked off. Used by the EOD form's Duties summary card.
+ */
+export const getDutiesSummary = cache(
+  async (
+    cadence: DutiesCadence,
+    periodKey: string,
+  ): Promise<{
+    total: number;
+    completed: number;
+    byGroup: { group: string | null; total: number; completed: number }[];
+  }> => {
+    const items = await getDutiesForPeriod(cadence, periodKey);
+    const buckets = new Map<
+      string | null,
+      { total: number; completed: number }
+    >();
+    let total = 0;
+    let completed = 0;
+    for (const it of items) {
+      total++;
+      if (it.completion) completed++;
+      const key = it.group_label ?? null;
+      const b = buckets.get(key) ?? { total: 0, completed: 0 };
+      b.total++;
+      if (it.completion) b.completed++;
+      buckets.set(key, b);
+    }
+    return {
+      total,
+      completed,
+      byGroup: [...buckets.entries()].map(([group, b]) => ({
+        group,
+        total: b.total,
+        completed: b.completed,
+      })),
+    };
   },
 );

@@ -16,10 +16,17 @@ import {
   deleteEodVanNote,
   upsertDailyReport,
 } from "@/app/actions/daily-ops";
-import type {
-  DailyReportRow,
-  EodVanNote,
+import {
+  DUTIES_GROUP_LABELS,
+  type DailyReportRow,
+  type EodVanNote,
 } from "@/lib/queries/daily-ops-types";
+
+interface DutiesSummary {
+  total: number;
+  completed: number;
+  byGroup: { group: string | null; total: number; completed: number }[];
+}
 
 interface IdLabel {
   id: string;
@@ -54,6 +61,7 @@ export function EodForm({
   drivers,
   vehicles,
   canWrite,
+  dutiesSummary,
 }: {
   date: string;
   report: DailyReportRow | null;
@@ -62,6 +70,7 @@ export function EodForm({
   drivers: IdLabel[];
   vehicles: VehiclePick[];
   canWrite: boolean;
+  dutiesSummary: DutiesSummary;
 }) {
   const router = useRouter();
 
@@ -323,18 +332,74 @@ export function EodForm({
         />
       </section>
 
-      {/* Duties checklist placeholder */}
-      <section className="rounded-xl border border-dashed bg-muted/30 p-4 space-y-2 lg:col-span-2">
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Duties checklist</h2>
+      {/* Duties checklist summary */}
+      <section className="rounded-xl border bg-card p-4 space-y-3 lg:col-span-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold">Duties checklist</h2>
+          </div>
+          <Link
+            href={`/duties?cadence=daily&date=${date}`}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Open checklist →
+          </Link>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Coming in Pass E — once the duties checklist surface ships, this
-          card will show <strong>X of Y</strong> items completed for today,
-          with a per-shift breakdown (Preload out / Load out / Post / RTS /
-          Closing). For now: track duties in the spreadsheet.
-        </p>
+        {dutiesSummary.total === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No daily duties configured. Add some at{" "}
+            <Link href="/admin/duties" className="underline-offset-2 hover:underline">
+              Manage → Duties
+            </Link>
+            .
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-3">
+              <span className="text-2xl font-semibold tabular-nums">
+                {dutiesSummary.completed}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                of {dutiesSummary.total} daily items done
+              </span>
+              {dutiesSummary.completed === dutiesSummary.total && (
+                <span className="text-xs uppercase tracking-wider rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                  All done
+                </span>
+              )}
+            </div>
+            <ul className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+              {dutiesSummary.byGroup
+                .filter((g) => g.group)
+                .map((g) => {
+                  const label =
+                    DUTIES_GROUP_LABELS[
+                      g.group as keyof typeof DUTIES_GROUP_LABELS
+                    ];
+                  const done = g.completed === g.total;
+                  return (
+                    <li
+                      key={g.group}
+                      className="flex items-center justify-between rounded-md border bg-muted/30 px-2 py-1.5"
+                    >
+                      <span className="truncate">{label}</span>
+                      <span
+                        className={
+                          "tabular-nums " +
+                          (done
+                            ? "text-emerald-700 dark:text-emerald-400 font-medium"
+                            : "text-muted-foreground")
+                        }
+                      >
+                        {g.completed}/{g.total}
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          </div>
+        )}
       </section>
     </div>
   );

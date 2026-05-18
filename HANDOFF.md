@@ -232,6 +232,9 @@ has been run against the live DB). New since the previous HANDOFF:
 20260518062804  coaching_sessions.category CHECK extended with 11
                 policy-point categories + import_type enum extended
                 with 'policy_points'
+20260518072444  duties_checklist (duties_template_items +
+                duties_completion + RLS + seed ~70 items from the
+                dispatcher's existing DUT7 Duties Checklist sheet)
 ```
 
 Plus all prior migrations from previous HANDOFF.
@@ -258,23 +261,12 @@ Plus all prior migrations from previous HANDOFF.
 - **Fleet history tab** on van detail was explicitly deferred from
   Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2.5 — Daily Ops (Passes A + B + C + D shipped, E pending)
-Pass A live: `/daily` roster + `/daily/paper` print + `/admin/waves`.
-Pass B live: `vehicle_shops` + FK + `/admin/shops` + managed dropdown.
-Pass C live: `daily_report` + `vehicle_issues.source` + `/daily/eod`
-form + per-van notes flowing into the issues tracker.
-Pass D live: `coaching_sessions.category` extended with 11 policy-
-point categories · Log Session dialog gains a grouped Category
-dropdown (trigger-clearing vs policy-point groups) · 9th import tab
-"Policy Points (CSV)" for the one-off 90-day backfill (strict + fuzzy
-name match, skips unmatched, never auto-creates drivers).
-Remaining:
-  - **Pass E** — duties checklist. `duties_template_items` +
-    `duties_completion` schema; daily/weekly/monthly templated lists
-    with per-item completion (timestamp + user); template editable
-    by management. Also: populate the placeholder card on the EOD
-    form so it shows "X of Y duties completed today" with per-shift
-    breakdown.
+### Phase 2.5 — Daily Ops (all 5 passes shipped)
+- **Pass A:** `/daily` roster (van-first inline editor) + `/daily/paper` print + `/admin/waves`
+- **Pass B:** `vehicle_shops` + FK + `/admin/shops` + managed dropdown
+- **Pass C:** `/daily/eod` form + per-van notes flowing into vehicle_issues with `source='eod'`
+- **Pass D:** 11 new coaching categories + Topic merged into Category dropdown + Policy Points CSV one-off backfill
+- **Pass E:** `/duties` checklist with daily/weekly/monthly cadence tabs + optimistic checkbox UI + `/admin/duties` template editor + EOD form's duties summary card populated
 
 ### Phase 3 (user-flagged)
 - **HR / hiring.** Onboarding, document expiry, training certs.

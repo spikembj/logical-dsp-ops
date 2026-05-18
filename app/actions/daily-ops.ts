@@ -560,3 +560,138 @@ export async function deleteEodVanNote(
   revalidatePath("/fleet/vans");
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Duties checklist
+// ---------------------------------------------------------------------------
+
+const PeriodKey = z
+  .string()
+  .regex(
+    /^(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2}|\d{4}-\d{2})$/,
+    "period_key must be YYYY-MM-DD, YYYY-Www, or YYYY-MM",
+  );
+
+const ToggleDutySchema = z.object({
+  template_item_id: z.string().uuid(),
+  period_key: PeriodKey,
+  done: z.boolean(),
+});
+
+export async function toggleDutyCompletion(
+  input: z.infer<typeof ToggleDutySchema>,
+): Promise<ActionResult> {
+  const gate = await requireOperations();
+  if (!gate.ok) return gate;
+  const parsed = ToggleDutySchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (parsed.data.done) {
+    // upsert — clicking an already-checked item is a no-op without
+    // changing the original completed_at.
+    const { error } = await supabase
+      .from("duties_completion")
+      .upsert(
+        {
+          template_item_id: parsed.data.template_item_id,
+          period_key: parsed.data.period_key,
+          completed_by: user?.id ?? null,
+        },
+        { onConflict: "template_item_id,period_key", ignoreDuplicates: true },
+      );
+    if (error) return { ok: false, error: error.message };
+  } else {
+    // unchecking deletes the row entirely.
+    const { error } = await supabase
+      .from("duties_completion")
+      .delete()
+      .eq("template_item_id", parsed.data.template_item_id)
+      .eq("period_key", parsed.data.period_key);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/duties");
+  revalidatePath("/daily/eod");
+  return { ok: true };
+}
+
+const Cadence = z.enum(["daily", "weekly", "monthly"]);
+const Group = z
+  .enum(["preload_out", "load_out", "post_load_out", "rts", "closing"])
+  .nullable()
+  .optional();
+
+const UpsertDutyItemSchema = z.object({
+  id: z.string().uuid().optional(),
+  cadence: Cadence,
+  group_label: Group,
+  owner_label: z.string().trim().min(1, "Owner is required").max(60),
+  description: z.string().trim().min(1, "Description is required").max(500),
+  sort_order: z.number().int().min(0).max(100_000).optional(),
+  active: z.boolean().default(true),
+});
+
+export async function upsertDutyItem(
+  input: z.infer<typeof UpsertDutyItemSchema>,
+): Promise<ActionResult> {
+  const gate = await requireManagement();
+  if (!gate.ok) return gate;
+  const parsed = UpsertDutyItemSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const payload: Record<string, unknown> = {
+    cadence: parsed.data.cadence,
+    // Force daily to have a group; weekly/monthly null it out.
+    group_label:
+      parsed.data.cadence === "daily"
+        ? (parsed.data.group_label ?? "preload_out")
+        : null,
+    owner_label: parsed.data.owner_label,
+    description: parsed.data.description,
+    active: parsed.data.active,
+  };
+  if (parsed.data.sort_order !== undefined)
+    payload.sort_order = parsed.data.sort_order;
+  if (parsed.data.id) payload.id = parsed.data.id;
+
+  const { error } = await supabase
+    .from("duties_template_items")
+    .upsert(payload, { onConflict: "id" });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/duties");
+  revalidatePath("/admin/duties");
+  revalidatePath("/daily/eod");
+  return { ok: true };
+}
+
+const DeleteDutyItemSchema = z.object({ item_id: z.string().uuid() });
+
+export async function deleteDutyItem(
+  input: z.infer<typeof DeleteDutyItemSchema>,
+): Promise<ActionResult> {
+  const gate = await requireManagement();
+  if (!gate.ok) return gate;
+  const parsed = DeleteDutyItemSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  // FK on duties_completion is ON DELETE CASCADE — historical
+  // completions for the deleted item go with it.
+  const { error } = await supabase
+    .from("duties_template_items")
+    .delete()
+    .eq("id", parsed.data.item_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/duties");
+  revalidatePath("/admin/duties");
+  revalidatePath("/daily/eod");
+  return { ok: true };
+}

@@ -73,3 +73,88 @@ export interface EodVanNote {
   vehicle_name: string;
   vehicle_vin: string;
 }
+
+// ---------------------------------------------------------------------------
+// Duties checklist
+// ---------------------------------------------------------------------------
+
+export type DutiesCadence = "daily" | "weekly" | "monthly";
+
+/** Sub-group within a daily checklist, or null for weekly/monthly. */
+export type DutiesGroup =
+  | "preload_out"
+  | "load_out"
+  | "post_load_out"
+  | "rts"
+  | "closing"
+  | null;
+
+export interface DutiesTemplateItem {
+  id: string;
+  cadence: DutiesCadence;
+  group_label: DutiesGroup;
+  owner_label: string;
+  description: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DutiesCompletion {
+  id: string;
+  template_item_id: string;
+  period_key: string;
+  completed_at: string;
+  completed_by: string | null;
+}
+
+/** A template item joined with its completion (if any) for a given period. */
+export interface DutiesItemWithCompletion extends DutiesTemplateItem {
+  completion: DutiesCompletion | null;
+}
+
+export const DUTIES_GROUP_LABELS: Record<NonNullable<DutiesGroup>, string> = {
+  preload_out: "Preload out",
+  load_out: "Load out",
+  post_load_out: "Post load out",
+  rts: "Return to station",
+  closing: "Closing",
+};
+
+/** Ordering for daily groups in the UI. */
+export const DUTIES_GROUP_ORDER: NonNullable<DutiesGroup>[] = [
+  "preload_out",
+  "load_out",
+  "post_load_out",
+  "rts",
+  "closing",
+];
+
+/**
+ * Compute the period key for a given date + cadence.
+ * Daily: YYYY-MM-DD.
+ * Weekly: YYYY-Www (ISO week). Weeks start Monday — matches the
+ *   dispatcher's mental model since Amazon weeks are Sun-Sat and
+ *   our internal weekly tasks (e.g. "by Thursday 12pm") align
+ *   with calendar weeks, not Amazon weeks.
+ * Monthly: YYYY-MM.
+ */
+export function periodKeyFor(date: Date, cadence: DutiesCadence): string {
+  if (cadence === "daily") {
+    return date.toISOString().slice(0, 10);
+  }
+  if (cadence === "monthly") {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+  // ISO week — pulled from a well-known algorithm to avoid date-fns
+  // import here (this file ships to the browser).
+  const d = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((+d - +yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+}

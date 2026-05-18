@@ -7,7 +7,12 @@ import {
   type UserRole,
 } from "@/lib/types/database";
 import { todayIso, formatSessionDate } from "@/lib/format/dates";
-import { getDailyReport, listEodNotesForDate } from "@/lib/queries/daily-ops";
+import {
+  getDailyReport,
+  listEodNotesForDate,
+  getDutiesSummary,
+} from "@/lib/queries/daily-ops";
+import { periodKeyFor } from "@/lib/queries/daily-ops-types";
 import { listUsers } from "@/lib/queries/users";
 import { listDrivers } from "@/lib/queries/drivers";
 import { listVehicles } from "@/lib/queries/fleet";
@@ -40,13 +45,19 @@ export default async function EodPage({ searchParams }: PageProps) {
       me.role as UserRole,
     );
 
-  const [report, eodNotes, users, drivers, vehicles] = await Promise.all([
-    getDailyReport(date),
-    listEodNotesForDate(date),
-    listUsers(),
-    listDrivers(),
-    listVehicles(),
-  ]);
+  const dutyPeriodKey = periodKeyFor(
+    new Date(`${date}T12:00:00Z`),
+    "daily",
+  );
+  const [report, eodNotes, users, drivers, vehicles, dutiesSummary] =
+    await Promise.all([
+      getDailyReport(date),
+      listEodNotesForDate(date),
+      listUsers(),
+      listDrivers(),
+      listVehicles(),
+      getDutiesSummary("daily", dutyPeriodKey),
+    ]);
 
   // Dispatchers pool = active users with operations role
   // (management OR dispatcher).
@@ -112,6 +123,7 @@ export default async function EodPage({ searchParams }: PageProps) {
         drivers={driverPool}
         vehicles={vehiclePool}
         canWrite={canWrite}
+        dutiesSummary={dutiesSummary}
       />
     </div>
   );

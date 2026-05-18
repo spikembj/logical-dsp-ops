@@ -275,6 +275,20 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - Unique on (date, driver_id) and (date, vehicle_id) — prevents double-booking either side
 - RLS: read for active users, write for **operations** (dispatcher + management). Dispatchers can edit; this is their workspace.
 
+### `duties_template_items`
+**Master list of recurring tasks.** Daily / weekly / monthly cadence. Daily items group into Preload out / Load out / Post load out / RTS / Closing; weekly + monthly are flat. Each item has an owner label (free text — Dispatcher / Assistant / Michael / Barzin / etc.) so the team can split work without ambiguity.
+- `id` (uuid, PK), `cadence` (text check `daily|weekly|monthly`), `group_label` (text check, nullable — required for daily, must be null for weekly/monthly per the upsert action), `owner_label` (text), `description` (text), `sort_order` (int, default 100), `active` (bool, default true)
+- RLS: read for active users, write for management. Templates are configuration.
+
+### `duties_completion`
+**One row per (item, period) marking it done.** Period key encodes the period the duty applies to:
+- daily: `YYYY-MM-DD`
+- weekly: `YYYY-Www` (ISO week, Mon-Sun)
+- monthly: `YYYY-MM`
+Unique on `(template_item_id, period_key)`. Unchecking a duty deletes the row entirely (no soft-delete — the "is this done?" question is binary and per-period). Cascades on item delete so historical completions go away when the template item is removed.
+- `id` (uuid, PK), `template_item_id` (FK → duties_template_items, cascade), `period_key` (text), `completed_at` (timestamptz), `completed_by` (uuid → users.id, nullable)
+- RLS: read for active users, write for is_operations() — dispatchers tick boxes as they finish tasks.
+
 ### `daily_report`
 **One row per date** capturing the dispatcher's end-of-day summary. Replaces the bottom half of the DUT7 Accountability Sheet.
 - `id` (uuid, PK), `date` (date, unique not null)
@@ -497,10 +511,20 @@ Save semantics: debounced for typed inputs (~600ms after last keystroke), immedi
 ### 14. Daily Paper (`/daily/paper?date=…`)
 Printable view of the roster. Server-rendered, minimal CSS, optimized for letter paper. Same data as the dashboard sorted by wave + van; date in the header; blank lines for the dispatcher names (they handwrite or we'll fill from the EOD report once that lands). On-screen has a Print button; print CSS hides the chrome and Notes column.
 
-### 15. Wave times admin (`/admin/waves`)
+### 15. Duties checklist (`/duties?cadence=daily|weekly|monthly`)
+Recurring tasks the dispatch team works through each shift / week / month. Cadence tabs at the top; daily groups items by Preload out / Load out / Post load out / RTS / Closing, weekly + monthly group by owner. Each item is a checkbox — clicking toggles the `duties_completion` row for the current period (optimistic UI so the check feels instant). Period auto-rolls based on the current date / ISO week / current month.
+
+**Daily** can be back-dated via `?date=` for late evening writes ("yesterday's duties"). **Weekly** and **monthly** stay on the current period — looking at past completions is a future feature.
+
+Per-section progress counts in each group header (e.g. "Preload out · 7 / 10").
+
+### 16. Duties admin (`/admin/duties`)
+Management-only. CRUD over the duties template. Tabs for daily / weekly / monthly; each item gets a row with description, owner, sort order, active toggle, edit, delete. **Delete cascades** to historical completions for that item (drops the check history). To hide an item without losing history, toggle Active off — the item disappears from `/duties` but its historical completions remain queryable.
+
+### 17. Wave times admin (`/admin/waves`)
 Management-only. Add / edit / delete waves. The seed migration ships the current 8 waves (1=09:50 … 8=10:30); Amazon shuffles these maybe twice a year, and the dispatcher updates them here without a code deploy. Inactive flag hides a wave from the picker without breaking historical roster rows that still reference it. Delete is blocked when any roster row references the wave (use Inactive instead).
 
-### 16. Shops admin (`/admin/shops`)
+### 18. Shops admin (`/admin/shops`)
 Management-only. Edit the list of values that show up in each van's **Current shop / location** dropdown on the Fleet page. Sort order controls picker order; Active toggles visibility without losing the records. Delete is safe — vans pointing to the shop get cleared (`ON DELETE SET NULL`).
 
 ## Build Order
@@ -520,7 +544,7 @@ Management-only. Edit the list of values that show up in each van's **Current sh
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
 10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
-11. 🚧 Phase 2.5 — **Daily Ops** (Pass A + B + C + D shipped, E pending). Pass A: `wave_times` + `daily_roster` tables · van-first inline-editable `/daily` roster · `/daily/paper` print · `/admin/waves`. Pass B: `vehicle_shops` + FK on vehicles.current_shop_id · `/admin/shops` · managed shop dropdown on the van detail. Pass C: `daily_report` + `vehicle_issues.source` · `/daily/eod` form with auto-save + per-van notes that flow into the issues tracker · grounding auto-issues tagged `source='grounding_auto'`. Pass D: extend `coaching_sessions.category` CHECK with 11 policy-point categories · Log Session dialog gains a grouped Category dropdown (trigger-clearing vs policy-point groups) · 9th import tab "Policy Points (CSV)" with one-off 90-day backfill (matches strict + fuzzy, skips unmatched; maps "write up"/"record only"/"warning" to `write_up`/`discussion`/`verbal_warning`). Pending: Pass E = duties checklist (daily/weekly/monthly templates with completion tracking + populate the EOD form's duties summary card).
+11. ✅ Phase 2.5 — **Daily Ops** (all 5 passes shipped). Pass A: `wave_times` + `daily_roster` tables · van-first inline `/daily` roster · `/daily/paper` print · `/admin/waves`. Pass B: `vehicle_shops` + FK on vehicles.current_shop_id · `/admin/shops` · managed shop dropdown. Pass C: `daily_report` + `vehicle_issues.source` · `/daily/eod` form with auto-save + per-van notes that flow into the issues tracker · grounding auto-issues tagged `source='grounding_auto'`. Pass D: extend `coaching_sessions.category` with 11 policy-point categories · Topic input merged into the Category dropdown · 9th import tab "Policy Points (CSV)" with one-off 90-day backfill. Pass E: `duties_template_items` + `duties_completion` tables · `/duties` checklist with daily/weekly/monthly cadence tabs and optimistic checkbox UI · `/admin/duties` template editor · EOD form's duties summary card populated with X/Y per-group counts.
 
 ## Audit & Data Integrity Rules
 
