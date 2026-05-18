@@ -420,3 +420,143 @@ export async function deleteWaveTime(
   revalidatePath("/daily");
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// End-of-day report
+// ---------------------------------------------------------------------------
+
+const NullableInt = z.number().int().min(0).max(10_000).nullable().optional();
+
+const UpsertReportSchema = z.object({
+  date: Iso,
+  dispatchers: z.array(z.string().uuid()).default([]),
+  routes_total: NullableInt,
+  routes_reduced: NullableInt,
+  routes_recycled: NullableInt,
+  routes_ad_hocs: NullableInt,
+  camera_hits: NullableInt,
+  drivers_after_8pm: z.array(z.string().uuid()).default([]),
+  injuries_incidents: z.string().trim().max(10_000).nullable().optional(),
+  operational_vans_next_day: NullableInt,
+  operational_phones_next_day: NullableInt,
+  notes: z.string().trim().max(10_000).nullable().optional(),
+});
+
+export async function upsertDailyReport(
+  input: z.infer<typeof UpsertReportSchema>,
+): Promise<ActionResult> {
+  const gate = await requireOperations();
+  if (!gate.ok) return gate;
+  const parsed = UpsertReportSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase
+    .from("daily_report")
+    .upsert(
+      {
+        date: parsed.data.date,
+        dispatchers: parsed.data.dispatchers,
+        routes_total: parsed.data.routes_total ?? null,
+        routes_reduced: parsed.data.routes_reduced ?? null,
+        routes_recycled: parsed.data.routes_recycled ?? null,
+        routes_ad_hocs: parsed.data.routes_ad_hocs ?? null,
+        camera_hits: parsed.data.camera_hits ?? null,
+        drivers_after_8pm: parsed.data.drivers_after_8pm,
+        injuries_incidents: parsed.data.injuries_incidents?.trim() || null,
+        operational_vans_next_day:
+          parsed.data.operational_vans_next_day ?? null,
+        operational_phones_next_day:
+          parsed.data.operational_phones_next_day ?? null,
+        notes: parsed.data.notes?.trim() || null,
+        updated_by: user?.id ?? null,
+      },
+      { onConflict: "date" },
+    );
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/daily");
+  revalidatePath("/daily/eod");
+  return { ok: true };
+}
+
+// EOD per-van note = creates a vehicle_issues row with source='eod'.
+// Single-line description, severity defaults to minor, status open.
+// Promotion to a real long-running issue happens via the Fleet page.
+const CreateEodNoteSchema = z.object({
+  date: Iso,
+  vehicle_id: z.string().uuid(),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Note text is required")
+    .max(2000),
+});
+
+export async function createEodVanNote(
+  input: z.infer<typeof CreateEodNoteSchema>,
+): Promise<ActionResult> {
+  const gate = await requireOperations();
+  if (!gate.ok) return gate;
+  const parsed = CreateEodNoteSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Stamp created_at to noon UTC of the EOD date so the date-range
+  // query in listEodNotesForDate groups it correctly even when the
+  // note is logged at 11pm local or the next morning.
+  const stampedAt = `${parsed.data.date}T12:00:00Z`;
+
+  const { error } = await supabase.from("vehicle_issues").insert({
+    vehicle_id: parsed.data.vehicle_id,
+    category: "other",
+    severity: "minor",
+    description: parsed.data.description,
+    status: "open",
+    source: "eod",
+    auto_created: false,
+    reported_by: user?.id ?? null,
+    reported_at: stampedAt,
+    created_at: stampedAt,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/daily/eod");
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}
+
+const DeleteEodNoteSchema = z.object({ issue_id: z.string().uuid() });
+
+export async function deleteEodVanNote(
+  input: z.infer<typeof DeleteEodNoteSchema>,
+): Promise<ActionResult> {
+  const gate = await requireOperations();
+  if (!gate.ok) return gate;
+  const parsed = DeleteEodNoteSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  // Guard: only delete rows that came from EOD. Prevents accidentally
+  // deleting a real issue that happens to have the same id passed in.
+  const { error } = await supabase
+    .from("vehicle_issues")
+    .delete()
+    .eq("id", parsed.data.issue_id)
+    .eq("source", "eod");
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/daily/eod");
+  revalidatePath("/fleet");
+  revalidatePath("/fleet/vans");
+  return { ok: true };
+}

@@ -2,8 +2,10 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  DailyReportRow,
   DailyRosterEntry,
   DailyRosterRow,
+  EodVanNote,
   WaveTime,
 } from "./daily-ops-types";
 
@@ -138,5 +140,73 @@ export const getMostRecentRosterDate = cache(
       return null;
     }
     return (data?.date as string | undefined) ?? null;
+  },
+);
+
+// ---------------------------------------------------------------------------
+// End-of-day report
+// ---------------------------------------------------------------------------
+
+/** Get the EOD report for a date, or null if none has been started yet. */
+export const getDailyReport = cache(
+  async (date: string): Promise<DailyReportRow | null> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("daily_report")
+      .select("*")
+      .eq("date", date)
+      .maybeSingle();
+    if (error) {
+      console.error("getDailyReport failed:", error);
+      return null;
+    }
+    return (data as DailyReportRow | null) ?? null;
+  },
+);
+
+/**
+ * Per-van notes logged via the EOD form for a given date. Joined with
+ * the vehicle name + VIN so the page can render them without a second
+ * lookup.
+ *
+ * Filters: source='eod' AND created_at::date = report_date. We don't
+ * tie EOD notes to the daily_report row by FK — they're independent
+ * vehicle_issues rows that just happen to have been created from the
+ * EOD form. The date filter is how we group them visually.
+ */
+export const listEodNotesForDate = cache(
+  async (date: string): Promise<EodVanNote[]> => {
+    const supabase = await createClient();
+    const start = `${date}T00:00:00Z`;
+    const end = `${date}T23:59:59.999Z`;
+    const { data, error } = await supabase
+      .from("vehicle_issues")
+      .select(
+        `id, vehicle_id, description, created_at,
+         vehicles (vehicle_name, vin)`,
+      )
+      .eq("source", "eod")
+      .gte("created_at", start)
+      .lte("created_at", end)
+      .order("created_at", { ascending: true });
+    if (error) {
+      console.error("listEodNotesForDate failed:", error);
+      return [];
+    }
+    type Joined = {
+      id: string;
+      vehicle_id: string;
+      description: string;
+      created_at: string;
+      vehicles: { vehicle_name: string | null; vin: string } | null;
+    };
+    return ((data ?? []) as unknown as Joined[]).map((r) => ({
+      id: r.id,
+      vehicle_id: r.vehicle_id,
+      description: r.description,
+      created_at: r.created_at,
+      vehicle_name: r.vehicles?.vehicle_name ?? r.vehicles?.vin ?? "?",
+      vehicle_vin: r.vehicles?.vin ?? "",
+    }));
   },
 );

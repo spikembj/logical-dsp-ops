@@ -226,6 +226,9 @@ has been run against the live DB). New since the previous HANDOFF:
 20260518033735  vehicle_shops (table + seed of 19 values + FK on
                 vehicles.current_shop_id + case-insensitive backfill
                 from deprecated current_shop_location text column)
+20260518055531  daily_report (table) + vehicle_issues.source column
+                with backfill + apply_vehicle_grounding_changes
+                updated to tag source='grounding_auto'
 ```
 
 Plus all prior migrations from previous HANDOFF.
@@ -252,7 +255,7 @@ Plus all prior migrations from previous HANDOFF.
 - **Fleet history tab** on van detail was explicitly deferred from
   Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2.5 — Daily Ops (Passes A + B shipped, C-E pending)
+### Phase 2.5 — Daily Ops (Passes A + B + C shipped, D-E pending)
 Pass A live: `/daily` roster (van-first inline editor with autocomplete
 + autosave + per-van driver prefill) + `/daily/paper` print +
 `/admin/waves`.
@@ -260,12 +263,13 @@ Pass B live: `vehicle_shops` table + seed of 19 values · FK on
 `vehicles.current_shop_id` with backfill from the deprecated text
 column · `/admin/shops` CRUD · van Overview "Current shop / location"
 is now a managed dropdown instead of free text.
+Pass C live: `daily_report` table + `vehicle_issues.source` column ·
+`/daily/eod` form (auto-save, debounced text + immediate
+chip/checkbox) · per-van notes flow straight into the issues tracker
+tagged `source='eod'` with an EOD badge in the issues UI · grounding
+auto-issues now tagged `source='grounding_auto'`. Duties-checklist
+card is a placeholder until Pass E lands.
 Remaining passes scoped + agreed:
-  - **Pass C** — end-of-day report. Per-date row capturing route
-    counts (total / reduced / recycled / ad-hocs), dispatcher names,
-    drivers staying after 8pm, injuries/incidents free text, camera
-    hits, the various checkboxes. No Q/S drivers-messaged section —
-    that workflow lives in coaching already.
   - **Pass D** — extend `coaching_sessions.category` enum with the 11
     policy-point categories from the user's screenshot (same_day_call_off,
     no_call_no_show, abandon_route, safety_concern, quality_issue,
@@ -276,7 +280,9 @@ Remaining passes scoped + agreed:
   - **Pass E** — duties checklist. `duties_template_items` +
     `duties_completion` schema; daily/weekly/monthly templated lists
     with per-item completion (timestamp + user); template editable
-    by management.
+    by management. Also: populate the placeholder card on the EOD
+    form so it shows "X of Y duties completed today" with per-shift
+    breakdown.
 
 ### Phase 3 (user-flagged)
 - **HR / hiring.** Onboarding, document expiry, training certs.

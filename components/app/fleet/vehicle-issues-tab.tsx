@@ -129,6 +129,14 @@ function IssueRow({
                 auto
               </span>
             )}
+            {issue.source === "eod" && (
+              <span
+                className="text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                title="Logged via the end-of-day report"
+              >
+                EOD
+              </span>
+            )}
           </div>
           <p className="text-sm mt-1.5">{issue.description}</p>
           <p className="text-xs text-muted-foreground mt-1">

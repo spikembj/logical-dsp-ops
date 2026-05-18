@@ -236,6 +236,7 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `status` (enum: `open / in_shop / fixed / closed_no_repair`, default `open`)
 - `resolved_at` (timestamptz, nullable), `resolution_notes` (text, nullable)
 - `auto_created` (bool, default `false`) — `true` when created by the grounding-detection trigger on import
+- `source` (text, check `'manual' | 'eod' | 'grounding_auto'`, default `'manual'`) — where the row came from. Manual = added on the Fleet page. EOD = typed in the End of Day report's per-van notes section (skip-the-steps issue logging). Grounding_auto = inserted by `apply_vehicle_grounding_changes` when an Amazon import flips a van grounded. UI shows a small EOD badge on issues with `source='eod'`.
 - `photo_urls` (jsonb, default `[]`) — empty in Phase 2; populated in Phase 3 (driver-facing VCR + photo damage detection)
 - `created_at`, `updated_at`
 
@@ -273,6 +274,18 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `created_at`, `updated_at`, `created_by`, `updated_by`
 - Unique on (date, driver_id) and (date, vehicle_id) — prevents double-booking either side
 - RLS: read for active users, write for **operations** (dispatcher + management). Dispatchers can edit; this is their workspace.
+
+### `daily_report`
+**One row per date** capturing the dispatcher's end-of-day summary. Replaces the bottom half of the DUT7 Accountability Sheet.
+- `id` (uuid, PK), `date` (date, unique not null)
+- `dispatchers` (uuid[]) — `users.id` of dispatchers on shift (no FK on array elements — stale UUIDs render as nothing)
+- Route counts: `routes_total`, `routes_reduced`, `routes_recycled`, `routes_ad_hocs` (int, nullable)
+- Safety: `camera_hits` (int, nullable), `drivers_after_8pm` (uuid[] — drivers.id by convention)
+- Free text: `injuries_incidents`, `notes`
+- Next-day capacity: `operational_vans_next_day`, `operational_phones_next_day`
+- `created_at`, `updated_at`, `created_by`, `updated_by`
+- RLS: same is_operations() pattern as daily_roster.
+- The per-van notes section on the EOD form does NOT live in this table — each note is its own `vehicle_issues` row tagged `source='eod'`, so notes flow straight into the issues tracker.
 
 ### `vehicle_pave_inspections`
 **One row per completed PAVE inspection.** PAVE = Periodic Amazon Vehicle Evaluation, mandatory quarterly per van. A van can have multiple inspections per quarter (e.g. score=2 in April triggers a re-inspection in May) — the latest row wins for "this quarter status." Failure is administrative only, never grounds the van.
@@ -467,13 +480,26 @@ Header strip: date nav (Prev / Today / Next + a date picker), an assignments cou
 
 **Past days are editable** — same workflow as the spreadsheet was. Roster rows are the permanent historical record.
 
-### 13. Daily Paper (`/daily/paper?date=…`)
+### 13. End of day (`/daily/eod?date=…`)
+End-of-day form. Auto-saves on every field change. Fields:
+- **Routes** (4 number inputs: Total / Reduced / Recycled / Ad-hocs)
+- **Safety + next-day capacity** (Camera hits + Operational vans/phones tomorrow)
+- **Dispatchers on shift** — checklist over users with dispatcher OR management role
+- **Drivers on shift after 8pm** — searchable chip picker over active drivers
+- **Injuries / incidents** (free text)
+- **Per-van notes** — type-ahead van picker + note input. Each Add creates a `vehicle_issues` row with `source='eod'`, severity `minor`, category `other`, status `open` — surfaces immediately on `/fleet`, in the van's Issues tab, and in the Vehicles table's open-issues count. Delete on this surface removes the issue.
+- **General notes** (free text overflow)
+- **Duties checklist** — placeholder until Pass E ships; will summarize "X of Y completed today" with per-shift breakdown.
+
+Save semantics: debounced for typed inputs (~600ms after last keystroke), immediate for chip/checkbox changes. "Saved at HH:MM:SS" indicator at the top of the form.
+
+### 14. Daily Paper (`/daily/paper?date=…`)
 Printable view of the roster. Server-rendered, minimal CSS, optimized for letter paper. Same data as the dashboard sorted by wave + van; date in the header; blank lines for the dispatcher names (they handwrite or we'll fill from the EOD report once that lands). On-screen has a Print button; print CSS hides the chrome and Notes column.
 
-### 14. Wave times admin (`/admin/waves`)
+### 15. Wave times admin (`/admin/waves`)
 Management-only. Add / edit / delete waves. The seed migration ships the current 8 waves (1=09:50 … 8=10:30); Amazon shuffles these maybe twice a year, and the dispatcher updates them here without a code deploy. Inactive flag hides a wave from the picker without breaking historical roster rows that still reference it. Delete is blocked when any roster row references the wave (use Inactive instead).
 
-### 15. Shops admin (`/admin/shops`)
+### 16. Shops admin (`/admin/shops`)
 Management-only. Edit the list of values that show up in each van's **Current shop / location** dropdown on the Fleet page. Sort order controls picker order; Active toggles visibility without losing the records. Delete is safe — vans pointing to the shop get cleared (`ON DELETE SET NULL`).
 
 ## Build Order
@@ -493,7 +519,7 @@ Management-only. Edit the list of values that show up in each van's **Current sh
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
 10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
-11. 🚧 Phase 2.5 — **Daily Ops** (Pass A + B shipped, C-E pending). Pass A: `wave_times` + `daily_roster` tables · `is_operations()` helper · van-first inline-editable `/daily` roster with autocomplete + autosave + driver prefill from last assignment per van · `/daily/paper` print view · `/admin/waves` wave-times CRUD · sidebar entry. Pass B: `vehicle_shops` table + seed of 19 values · `vehicles.current_shop_id` FK with backfill from the deprecated text column · `/admin/shops` CRUD · van Overview's "Current shop" replaced with a managed dropdown. Pending passes: C = end-of-day report, D = policy point categories on `coaching_sessions` + 90-day backfill, E = duties checklist (daily/weekly/monthly templates with completion tracking).
+11. 🚧 Phase 2.5 — **Daily Ops** (Pass A + B + C shipped, D-E pending). Pass A: `wave_times` + `daily_roster` tables · `is_operations()` helper · van-first inline-editable `/daily` roster with autocomplete + autosave + driver prefill from last assignment per van · `/daily/paper` print view · `/admin/waves` wave-times CRUD. Pass B: `vehicle_shops` table + seed of 19 values · `vehicles.current_shop_id` FK with backfill · `/admin/shops` CRUD · van Overview's "Current shop" replaced with a managed dropdown. Pass C: `daily_report` table + `vehicle_issues.source` column · `/daily/eod` form (auto-save) · per-van notes that flow straight into the issues tracker (`source='eod'`) with an EOD badge in the issues UI · grounding auto-issue function updated to tag `source='grounding_auto'`. Pending passes: D = policy point categories on `coaching_sessions` + 90-day backfill, E = duties checklist (daily/weekly/monthly templates with completion tracking + populate the EOD form's duties summary card).
 
 ## Audit & Data Integrity Rules
 

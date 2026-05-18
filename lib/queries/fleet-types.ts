@@ -85,6 +85,8 @@ export type VehicleIssueStatus =
   | "fixed"
   | "closed_no_repair";
 
+export type VehicleIssueSource = "manual" | "eod" | "grounding_auto";
+
 export interface VehicleIssueRow {
   id: string;
   vehicle_id: string;
@@ -97,6 +99,7 @@ export interface VehicleIssueRow {
   resolved_at: string | null;
   resolution_notes: string | null;
   auto_created: boolean;
+  source: VehicleIssueSource;
   created_at: string;
   updated_at: string;
 }
