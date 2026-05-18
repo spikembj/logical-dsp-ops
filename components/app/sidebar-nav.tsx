@@ -8,6 +8,8 @@ import {
   Upload,
   ShieldUser,
   Truck,
+  CalendarClock,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types/database";
@@ -21,6 +23,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/", label: "Performance", icon: LayoutDashboard, exact: true },
+  { href: "/daily", label: "Daily Ops", icon: CalendarClock },
   { href: "/fleet", label: "Fleet", icon: Truck },
   { href: "/drivers", label: "Drivers", icon: Users },
   { href: "/import", label: "Import", icon: Upload },
@@ -28,6 +31,7 @@ const NAV: NavItem[] = [
 
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin/users", label: "Management", icon: ShieldUser },
+  { href: "/admin/waves", label: "Wave times", icon: Clock },
 ];
 
 export function SidebarNav({ role }: { role: UserRole }) {

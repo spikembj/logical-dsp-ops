@@ -253,6 +253,20 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `notes` (text, nullable)
 - `created_at`, `updated_at`
 
+### `wave_times`
+**Editable lookup of Amazon wave numbers → show times.** Used by the Daily Ops roster picker and joined into the dispatch sheet for display. Seeded with 8 waves (1=09:50 … 8=10:30); Amazon re-times them ~twice a year. Management edits via `/admin/waves`.
+- `wave` (int, PK, 1-20)
+- `show_time` (time)
+- `active` (bool, default true) — inactive waves stay in the table (so historical roster rows still join) but are hidden from the picker
+- `created_at`, `updated_at`
+
+### `daily_roster`
+**One row per (date, driver, vehicle) assignment.** The dispatcher's daily workspace — replaces the "DUT7 Dispatch Sheet" Google Sheet. Rows are the permanent record of who drove which van on which day — useful when damage surfaces and we need to look up who had van X two days ago.
+- `id` (uuid, PK), `date` (date), `driver_id` (FK → drivers, restrict), `vehicle_id` (FK → vehicles, restrict), `wave` (int, FK → wave_times.wave, restrict), `notes` (text, nullable)
+- `created_at`, `updated_at`, `created_by`, `updated_by`
+- Unique on (date, driver_id) and (date, vehicle_id) — prevents double-booking either side
+- RLS: read for active users, write for **operations** (dispatcher + management). Dispatchers can edit; this is their workspace.
+
 ### `vehicle_pave_inspections`
 **One row per completed PAVE inspection.** PAVE = Periodic Amazon Vehicle Evaluation, mandatory quarterly per van. A van can have multiple inspections per quarter (e.g. score=2 in April triggers a re-inspection in May) — the latest row wins for "this quarter status." Failure is administrative only, never grounds the van.
 - `id`, `vehicle_id` (FK → vehicles.id, cascade)
@@ -267,6 +281,7 @@ Unique on (`driver_id`, `week_ending`); re-imports upsert.
 - `current_user_role()` (security definer) — reads caller's role for use in RLS.
 - `is_active_user()` (security definer) — boolean, used in RLS predicates.
 - `is_management()` (security definer) — true for owner / hr / ops_manager (and legacy admin / manager). Drives every RLS policy that gates writes on management-tier access.
+- `is_operations()` (security definer) — true for management **OR** dispatcher. Used only by `daily_roster` so dispatchers can edit their own workspace. Read access is still `is_active_user`.
 - `set_updated_at()` — generic trigger for tables with `updated_at`.
 - `log_coaching_session_revision()` — trigger on `coaching_sessions` UPDATE.
 - `set_coaching_acknowledged(uuid, boolean)` (security definer, granted to authenticated) — lets dispatchers flip the acknowledged toggle without write access to the rest of the row.
@@ -424,6 +439,33 @@ Printable label sheet. Renders every active van as a grid of QRs (4 per row by d
 
 QR encodes the plain VIN text — no URL — so it's directly compatible with Amazon's delivery-app VIN entry and any other barcode scanner that expects VIN-as-text.
 
+### 12. Daily Ops dashboard (`/daily`)
+Title: **Daily Ops**. The dispatcher's morning workspace. Replaces the "DUT7 Dispatch Sheet" Google Sheet they were editing every morning. Defaults to today; `?date=YYYY-MM-DD` jumps to another day. **Dispatchers + management can write**; everyone can read.
+
+Header strip: date nav (Prev / Today / Next + a date picker), an assignments count, and a **Daily Paper** print button.
+
+**Roster table**, sorted by wave then van:
+- **Wave** column shows wave number + show time (joined from `wave_times`)
+- **Driver** column links to the driver profile
+- **Van** column links to the van detail
+- **Notes** column for the dispatcher's ad-hoc note (e.g. "trainer, paired with Adam")
+- **Edit** icon per row opens a dialog with the same fields; **Add** button at the top opens an empty version
+
+**Pickers** inside the dialog:
+- Driver: searchable list of active drivers (position=driver only; helpers excluded). Drivers already on today's roster are hidden from OTHER rows' pickers; the row's current driver stays visible when editing.
+- Van: searchable list of vans where `operational_status='operational'`. Grounded / ready-for-audit vans never appear in the picker — even if you toggle to a date where they were operational. Same conflict-hiding behavior as drivers.
+- Wave: dropdown of active waves from `wave_times`.
+
+**Copy from {prev date} button** appears when today is empty *and* there's a prior date with roster rows. Clones rows from the most-recent prior dated roster (handles weekends + skipped days), skipping rows where: (a) the van has since been grounded, (b) the driver has been deactivated, or (c) the slot already exists on the target date. Returns counts in the success toast so you can see what landed and what was dropped.
+
+**Past days are editable** — same workflow as the spreadsheet was. Roster rows are the permanent historical record.
+
+### 13. Daily Paper (`/daily/paper?date=…`)
+Printable view of the roster. Server-rendered, minimal CSS, optimized for letter paper. Same data as the dashboard sorted by wave + van; date in the header; blank lines for the dispatcher names (they handwrite or we'll fill from the EOD report once that lands). On-screen has a Print button; print CSS hides the chrome and Notes column.
+
+### 14. Wave times admin (`/admin/waves`)
+Management-only. Add / edit / delete waves. The seed migration ships the current 8 waves (1=09:50 … 8=10:30); Amazon shuffles these maybe twice a year, and the dispatcher updates them here without a code deploy. Inactive flag hides a wave from the picker without breaking historical roster rows that still reference it. Delete is blocked when any roster row references the wave (use Inactive instead).
+
 ## Build Order
 
 1. ✅ Project setup, Supabase, auth, role-based middleware.
@@ -440,7 +482,8 @@ QR encodes the plain VIN text — no URL — so it's directly compatible with Am
 7. ✅ Admin — Management page (Owner / HR / Ops Manager / Dispatcher roles, inviteUserByEmail) + Employees page (CRUD with position + standard_parcel rename).
 8. ✅ Polish: Recharts multi-line trend chart on Performance tab.
 9. ✅ Phase 1.5 (post-Phase-1 expansion, all shipped): Vercel deploy · Safety/Quality dashboard split with per-category trigger clearing · file-hash hard-block on duplicate uploads · dispatcher↔driver FK + Management picker · Netradyne fuzzy-match fallback + two-DSP filtering · Rivian vehicle type collapsed into EDV · per-event-type safety trend chart + DSB/CDF donuts on Quality view.
-10. 🚧 Phase 2 — **Fleet** (in progress): `vehicles` / `vehicle_issues` / `vehicle_parts` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts / History) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
+10. ✅ Phase 2 — **Fleet** (shipped): `vehicles` / `vehicle_issues` / `vehicle_parts` / `vehicle_pave_inspections` tables · 8th import tab (Amazon Vehicles XLSX, SheetJS) · grounding auto-issue trigger · `/fleet` dashboard (4 stat tiles + shop-grouped hero + open-issues hero + registration roster + PAVE tile) · `/fleet/vans` list with manual-override pill · `/fleet/vans/[vin]` detail (Overview / Issues / Parts) with operational-status override widget · `/fleet/qr-sheet` printable VIN labels · per-van QR modal. Driver-facing VCR + photo-driven damage detection deferred to Phase 3.
+11. 🚧 Phase 2.5 — **Daily Ops** (Pass A shipped, B-E pending). Pass A: `wave_times` + `daily_roster` tables · `is_operations()` helper for dispatcher write access · `/daily` dashboard with inline-editable roster + date nav + "Copy from {prev date}" seed · `/daily/paper` print view · `/admin/waves` wave-times CRUD · sidebar entry. Pending passes: B = shop dropdown for Fleet, C = end-of-day report, D = policy point categories on `coaching_sessions` + 90-day backfill, E = duties checklist (daily/weekly/monthly templates with completion tracking).
 
 ## Audit & Data Integrity Rules
 

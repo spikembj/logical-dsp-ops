@@ -3,9 +3,10 @@
 > Read this **before SPEC.md** if you only have time for one. Read SPEC.md
 > right after — it is the source of truth for product behavior.
 >
-> **Updated 2026-05-17** after Phase 2 Fleet shipped + driver-creation
-> policy tightened + round-two phantom cleanup + recent-activity panel
-> + quarterly PAVE tracking. SPEC.md is current.
+> **Updated 2026-05-18** with Daily Ops Pass A: `/daily` roster +
+> `/daily/paper` print view + `/admin/waves` wave-times CRUD. Plus
+> the auth fix for invite/password-reset (set-password landing +
+> resetPasswordForEmail) shipped on 2026-05-17. SPEC.md is current.
 
 ## 1. Current Status
 
@@ -45,6 +46,15 @@ to-end.
 - `/fleet/qr-sheet` printable VIN-encoded QR labels (per-van include
   checkboxes, browser-print to letter-size)
 - Per-van QR modal everywhere (table icon, detail header, QR sheet)
+- **Daily Ops Pass A** — `/daily` dispatcher workspace with inline-
+  editable roster (driver / van / wave / notes), date nav, "Copy from
+  {prev date}" seed, dispatchers + management can write. `/daily/paper`
+  printable view. `/admin/waves` to edit Amazon wave numbers + times
+  without a code deploy.
+- **Auth invite + reset flows** — `/set-password` landing page now
+  catches both `type=invite` and `type=recovery`. Per-row key icon on
+  the Management page sends a password reset via
+  `resetPasswordForEmail`. Closes the gap that locked out Manny.
 
 **Known broken:** none reported.
 
@@ -211,6 +221,8 @@ has been run against the live DB). New since the previous HANDOFF:
                 without scorecard or coaching are phantoms)
 20260517200214  vehicle_pave_inspections (quarterly PAVE tracking +
                 quarter/year sync trigger)
+20260518002930  daily_ops_phase_a (wave_times + daily_roster +
+                is_operations() helper + RLS + seed 8 waves)
 ```
 
 Plus all prior migrations from previous HANDOFF.
@@ -237,11 +249,32 @@ Plus all prior migrations from previous HANDOFF.
 - **Fleet history tab** on van detail was explicitly deferred from
   Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2 follow-ons / Phase 3 (user-flagged)
-- **Daily Ops dashboard.** Day-of planning, van-to-driver assignments,
-  call-outs, route counts. Replaces a spreadsheet. User is collecting
-  screenshots + reference files for the design conversation. This is
-  the most actively-wanted next branch.
+### Phase 2.5 — Daily Ops (Pass A shipped, B-E pending)
+Pass A live: `/daily` roster + `/daily/paper` print + `/admin/waves`.
+Remaining passes scoped + agreed:
+  - **Pass B** — shop dropdown for Fleet. New `vehicle_shops` table +
+    small CRUD; van detail Overview's "Current shop" becomes a Select
+    over the shop list rather than free text. Seed list from user's
+    screenshot (Jiffy Lube / Goodyear / Rivian Dealer / Bountiful Ram
+    Dealer / etc. — about 18 entries).
+  - **Pass C** — end-of-day report. Per-date row capturing route
+    counts (total / reduced / recycled / ad-hocs), dispatcher names,
+    drivers staying after 8pm, injuries/incidents free text, camera
+    hits, the various checkboxes. No Q/S drivers-messaged section —
+    that workflow lives in coaching already.
+  - **Pass D** — extend `coaching_sessions.category` enum with the 11
+    policy-point categories from the user's screenshot (same_day_call_off,
+    no_call_no_show, abandon_route, safety_concern, quality_issue,
+    behavior_issue, van_damage, property_damage, slept_in, quit,
+    unable_to_finish). Existing trigger-clearing logic untouched —
+    only safety/quality/escalation clear triggers. Plus a one-off
+    backfill script for the last 90 days of the POLICY POINTS CSV.
+  - **Pass E** — duties checklist. `duties_template_items` +
+    `duties_completion` schema; daily/weekly/monthly templated lists
+    with per-item completion (timestamp + user); template editable
+    by management.
+
+### Phase 3 (user-flagged)
 - **HR / hiring.** Onboarding, document expiry, training certs.
 - **Driver-facing VCR submission** (Phase 3 — Phase 2 ships manager-
   tracked issues + parts + QR). Photo-driven damage detection also
@@ -264,7 +297,11 @@ Plus all prior migrations from previous HANDOFF.
 ├── app/
 │   ├── (app)/
 │   │   ├── admin/
-│   │   │   └── users/             # Management page (dispatcher↔driver picker)
+│   │   │   ├── users/             # Management page (dispatcher↔driver picker + reset button)
+│   │   │   └── waves/             # Edit Amazon wave numbers + show times
+│   │   ├── daily/
+│   │   │   ├── page.tsx           # Daily Ops dashboard (inline-editable roster + date nav)
+│   │   │   └── paper/page.tsx     # Printable Daily Paper view
 │   │   ├── drivers/
 │   │   │   ├── [id]/              # Driver detail (layout + 4 tabs)
 │   │   │   └── page.tsx           # Unified Drivers + Helpers list; mgmt-only Edit/Add
@@ -277,7 +314,8 @@ Plus all prior migrations from previous HANDOFF.
 │   │   ├── layout.tsx
 │   │   └── page.tsx               # Performance dashboard (Safety/Quality split)
 │   ├── (auth)/login/
-│   ├── actions/                   # 11 server-action files (added fleet.ts, vehicles-import.ts)
+│   ├── (auth)/set-password/       # Invite + password-reset landing
+│   ├── actions/                   # 12 server-action files (added daily-ops.ts)
 │   ├── auth/callback/
 │   ├── globals.css
 │   └── layout.tsx
@@ -288,16 +326,17 @@ Plus all prior migrations from previous HANDOFF.
 │   │   ├── dashboard/             # view-toggle, threshold-tile, leaderboards,
 │   │   │                          # needs-coaching-list, donuts, trend charts, stat-tile
 │   │   ├── defects/, import/, perf/, safety-events/
+│   │   ├── daily-ops/             # date-nav, daily-roster, print-button, waves-admin
 │   │   ├── fleet/                 # vehicle-tile, vehicles-table, vehicle-detail,
 │   │   │                          # vehicle-overview/issues/parts-tab,
 │   │   │                          # vehicle-qr-button, qr-sheet, pave-tile
-│   │   └── …driver-tabs, sidebar-nav, sign-out, theme-*
+│   │   └── …driver-tabs, driver-form-dialog, sidebar-nav, sign-out, theme-*
 │   └── ui/                        # shadcn (base-ui flavor) primitives
 ├── lib/
 │   ├── auth/require-role.ts
 │   ├── format/                    # badges, dates (incl. Amazon-week helpers)
 │   ├── parsing/                   # 6 parsers + file-hash + pdfjs polyfill + vehicles-xlsx
-│   ├── queries/                   # 12 query helpers (added fleet.ts, fleet-types.ts)
+│   ├── queries/                   # 14 query helpers (added daily-ops.ts, daily-ops-types.ts)
 │   ├── supabase/                  # client / server / middleware
 │   ├── types/database.ts
 │   ├── util/
