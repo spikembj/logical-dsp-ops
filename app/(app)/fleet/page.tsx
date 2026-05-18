@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { AlertTriangle, Wrench, MapPin, ArrowRight, Store } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  List,
+  MapPin,
+  QrCode,
+  Store,
+  Wrench,
+} from "lucide-react";
 import { requireUser } from "@/lib/auth/require-role";
 import { isManagement, type UserRole } from "@/lib/types/database";
 import {
@@ -97,30 +105,29 @@ export default async function FleetPage() {
             {totals.grounded} grounded
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             href="/fleet/vans"
-            className="text-muted-foreground hover:text-foreground hover:underline"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
+            <List className="h-4 w-4" />
             All vans
           </Link>
-          <span className="text-muted-foreground">·</span>
           <Link
             href="/fleet/qr-sheet"
-            className="text-muted-foreground hover:text-foreground hover:underline"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
+            <QrCode className="h-4 w-4" />
             QR sheet
           </Link>
           {canManage && (
-            <>
-              <span className="text-muted-foreground">·</span>
-              <Link
-                href="/admin/shops"
-                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
-              >
-                <Store className="h-3 w-3" /> Shops
-              </Link>
-            </>
+            <Link
+              href="/admin/shops"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            >
+              <Store className="h-4 w-4" />
+              Shops
+            </Link>
           )}
         </div>
       </div>

@@ -84,24 +84,24 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
             {roster.length === 1 ? "assignment" : "assignments"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             href="/duties"
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted text-sm transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <ListChecks className="h-4 w-4" />
             Duties
           </Link>
           <Link
             href={`/daily/eod?date=${date}`}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted text-sm transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <ClipboardCheck className="h-4 w-4" />
             End of day
           </Link>
           <Link
             href={`/daily/paper?date=${date}`}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted text-sm transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Printer className="h-4 w-4" />
             Daily Paper
@@ -109,7 +109,7 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
           {canManage && (
             <Link
               href="/admin/waves"
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-card hover:bg-muted text-sm transition-colors"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
             >
               <Clock className="h-4 w-4" />
               Wave times
