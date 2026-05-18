@@ -279,6 +279,68 @@ export const getPaveStatusForQuarter = cache(
   },
 );
 
+/**
+ * Every parts row across the fleet, joined with the van name + VIN
+ * for display. Used by the Fleet dashboard's Parts surface so the
+ * user can see "what is on order and which van it is for" without
+ * clicking into individual van details.
+ *
+ * Returned in status-priority order (needed → ordered → partial →
+ * received → installed → returned), then most recent ordered_at
+ * first. Callers filter to open-only as needed.
+ */
+export interface VehiclePartWithVehicle extends VehiclePartRow {
+  vehicle_name: string;
+  vehicle_vin: string;
+}
+
+const PART_STATUS_PRIORITY: Record<string, number> = {
+  needed: 0,
+  ordered: 1,
+  partial: 2,
+  received: 3,
+  installed: 4,
+  returned: 5,
+};
+
+export const listAllVehicleParts = cache(
+  async (): Promise<VehiclePartWithVehicle[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("vehicle_parts")
+      .select(
+        `id, vehicle_id, issue_id, part_name, part_number,
+         quantity_ordered, quantity_received, quantity_installed,
+         status, vendor, cost, ordered_at, received_at, notes,
+         created_at, updated_at,
+         vehicles (vehicle_name, vin)`,
+      );
+    if (error) {
+      console.error("listAllVehicleParts failed:", error);
+      return [];
+    }
+    type Joined = VehiclePartRow & {
+      vehicles: { vehicle_name: string | null; vin: string } | null;
+    };
+    return ((data ?? []) as unknown as Joined[])
+      .map((r) => ({
+        ...r,
+        vehicle_name: r.vehicles?.vehicle_name ?? r.vehicles?.vin ?? "?",
+        vehicle_vin: r.vehicles?.vin ?? "",
+      }))
+      .sort((a, b) => {
+        const sp =
+          (PART_STATUS_PRIORITY[a.status] ?? 99) -
+          (PART_STATUS_PRIORITY[b.status] ?? 99);
+        if (sp !== 0) return sp;
+        // Within a status bucket: most recent ordered_at first; nulls last.
+        const av = a.ordered_at ?? a.created_at;
+        const bv = b.ordered_at ?? b.created_at;
+        return bv.localeCompare(av);
+      });
+  },
+);
+
 export const listVehicleParts = cache(
   async (vehicleId: string): Promise<VehiclePartRow[]> => {
     const supabase = await createClient();
