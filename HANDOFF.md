@@ -14,8 +14,10 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. Live in production at **`https://logical-ops.vercel.app`**.
-In active daily use by the user, their boss, and Manny (test dispatcher).
+all shipped. **Phase 3 (HR & Hiring) Pass A shipped** — coaching review
+queue + worst-10 panel live at `/hr`. Live in production at
+**`https://logical-ops.vercel.app`**. In active daily use by the user,
+their boss, and Manny (test dispatcher).
 
 **What works end-to-end:**
 
@@ -78,9 +80,16 @@ In active daily use by the user, their boss, and Manny (test dispatcher).
   the wave-time table (reachable from a button on `/daily`).
 - **Shops admin** at `/admin/shops` — management-only CRUD over the
   shop dropdown values (reachable from a button on `/fleet`).
+- **HR dashboard** at `/hr` (Phase 3 Pass A) — coaching review queue
+  (sortable + searchable; default Unreviewed, tabs flip to Reviewed/All;
+  inline Reviewed button stamps `hr_reviewed_at`/`hr_reviewed_by` with
+  an optional HR note; Undo + edit-note on already-reviewed rows) +
+  worst-10 panel (90-day raw count, excludes trainings/discussions/voids,
+  category filter via `?cat=`). Management-only — dispatchers gated out
+  via middleware on `/hr/*` and the sidebar link is role-hidden.
 - **Sidebar** is flat: Performance / Daily Ops / Fleet / Drivers /
-  Import, plus a Manage section with just Management (`/admin/users`).
-  Wave times and Shops links live on their respective dashboards.
+  Import, plus a Manage section with HR + Management. Wave times and
+  Shops links live on their respective dashboards.
 
 **Known broken:** none reported. Vercel auto-deploy occasionally drops
 a commit — pushing an empty `chore: nudge Vercel` commit unblocks it
@@ -294,10 +303,13 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 30 migrations in `supabase/migrations/` have been run against
+**All 31 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260518223018  hr_coaching_review (coaching_sessions.hr_reviewed_at +
+                hr_reviewed_by + hr_review_notes + two partial indexes
+                for the HR queue + worst-10 query)
 20260518072444  duties_checklist (duties_template_items +
                 duties_completion + RLS + seed ~70 items from the
                 dispatcher's existing DUT7 Duties Checklist sheet)
@@ -351,10 +363,26 @@ Plus all prior migrations.
   the schema comment.
 
 ### Phase 3 (user-flagged)
-- **HR / hiring.** Onboarding, document expiry, training certs.
+- **HR / hiring.** Pass A shipped (coaching review queue + worst-10 +
+  `/hr` landing). Remaining passes per the user's spec call:
+  - **B** — HR-specific daily checklist (separate from `/duties`)
+  - **C** — Candidates kanban with the 8 status buckets (matches the
+    spreadsheet layout the user shared). Separate `candidates` table —
+    on TO HIRE, create a `drivers` row with a `candidate_id` FK back
+    so HR can click into pre-hire history. High turnover is the reason
+    we are NOT unifying with `drivers`.
+  - **D** — Dispatcher interview view inside `/daily` (all dispatchers
+    see all interviews; first to fill in notes "claims" the row). HR
+    edits the dispatcher's question set.
+  - **E** — Per-candidate QR-encoded interviewee form (unique URL so
+    answers auto-link to the candidate). HR reviews both forms side
+    by side.
+  - **F** — Onboarding tracking (separate HR onboarding form,
+    document expiry beyond what Amazon covers).
 - **Driver-facing VCR submission.** Photo-driven damage detection too.
+  (User explicitly deferred — skip for now.)
 - **Incidents / accidents with insurance + photos.** Separate from
-  `vehicle_issues` which covers operational damage.
+  `vehicle_issues`. User explicitly said: do this AFTER HR is complete.
 
 ### Explicitly out of scope
 - ADP / Slack / Rivian portal integrations
@@ -380,6 +408,7 @@ Plus all prior migrations.
 │   │   │   ├── [id]/                 # Driver detail (4 tabs)
 │   │   │   └── page.tsx              # Unified Drivers + Helpers list
 │   │   ├── duties/page.tsx           # Duties checklist + inline edit
+│   │   ├── hr/page.tsx               # HR landing — Phase 3 Pass A
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
@@ -408,6 +437,8 @@ Plus all prior migrations.
 │   │   │                             # vehicle-overview/issues/parts-tab,
 │   │   │                             # vehicle-qr-button, qr-sheet,
 │   │   │                             # pave-tile, shops-admin
+│   │   ├── hr/                       # coaching-review-queue,
+│   │   │                             # worst-offenders-panel
 │   │   └── …driver-tabs, driver-form-dialog, sidebar-nav, sign-out, theme-*
 │   └── ui/                           # shadcn (base-ui flavor) primitives
 ├── lib/

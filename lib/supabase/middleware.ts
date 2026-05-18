@@ -57,8 +57,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated → gate /admin to admin role only.
-  if (user && pathname.startsWith("/admin")) {
+  // Authenticated → gate /admin AND /hr to management roles only.
+  // Dispatchers must never reach the HR module — it surfaces coaching
+  // sign-offs, offender rankings, and (soon) candidate data they have
+  // no need to see.
+  if (user && (pathname.startsWith("/admin") || pathname.startsWith("/hr"))) {
     const { data: profile } = await supabase
       .from("users")
       .select("role, active")

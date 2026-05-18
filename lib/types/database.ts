@@ -62,6 +62,19 @@ export type CoachingSessionType =
   | "final_warning"
   | "termination";
 
+/**
+ * Session types that need HR review (everything except informal coaching).
+ * The DB partial index `coaching_sessions_hr_review_idx` and
+ * `lib/queries/hr-types.HR_REVIEWABLE_SESSION_TYPES` mirror this list —
+ * keep all three in sync if it ever changes.
+ */
+export const HR_REVIEWABLE_SESSION_TYPES: CoachingSessionType[] = [
+  "verbal_warning",
+  "write_up",
+  "final_warning",
+  "termination",
+];
+
 export interface UserRow {
   id: string;
   email: string;

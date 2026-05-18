@@ -9,6 +9,7 @@ import {
   ShieldUser,
   Truck,
   CalendarClock,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types/database";
@@ -28,7 +29,9 @@ const NAV: NavItem[] = [
   { href: "/import", label: "Import", icon: Upload },
 ];
 
+// Management-only nav. HR lands here too — dispatchers never see it.
 const ADMIN_NAV: NavItem[] = [
+  { href: "/hr", label: "HR", icon: Briefcase },
   { href: "/admin/users", label: "Management", icon: ShieldUser },
 ];
 
