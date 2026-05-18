@@ -18,6 +18,9 @@ import type {
   HrQueueMode,
 } from "@/lib/queries/hr-types";
 
+const COUNT_OPTIONS = [15, 30, 60, "all"] as const;
+type CountOption = (typeof COUNT_OPTIONS)[number];
+
 const SESSION_TYPE_CHIP: Record<string, string> = {
   verbal_warning:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
@@ -54,6 +57,10 @@ export function CoachingReviewQueue({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  // Same pattern as the dashboard's Needs Coaching hero — default to 15,
+  // toggle up to 60 or All. Reset when the search changes so a search
+  // never silently chops itself off at 15 results.
+  const [count, setCount] = useState<CountOption>(15);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -65,6 +72,11 @@ export function CoachingReviewQueue({
       return hay.includes(q);
     });
   }, [rows, search]);
+
+  const visible = useMemo(() => {
+    if (count === "all") return filtered;
+    return filtered.slice(0, count);
+  }, [filtered, count]);
 
   function setMode(next: HrQueueMode) {
     const url = new URL(window.location.href);
@@ -90,15 +102,37 @@ export function CoachingReviewQueue({
             </ModeTab>
           </div>
         </div>
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            placeholder="Search driver, topic, coach…"
-            className="h-8 pl-7 pr-2 rounded-md border bg-background text-xs w-64 focus:outline-none focus:ring-1 focus:ring-ring"
-          />
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            Show
+            <select
+              value={String(count)}
+              onChange={(e) =>
+                setCount(
+                  e.currentTarget.value === "all"
+                    ? "all"
+                    : (Number(e.currentTarget.value) as CountOption),
+                )
+              }
+              className="h-8 rounded-md border border-input bg-background px-1.5 text-xs outline-none focus-visible:border-ring"
+            >
+              {COUNT_OPTIONS.map((opt) => (
+                <option key={String(opt)} value={String(opt)}>
+                  {opt === "all" ? "All" : opt}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              placeholder="Search driver, topic, coach…"
+              className="h-8 pl-7 pr-2 rounded-md border bg-background text-xs w-64 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
         </div>
       </header>
 
@@ -110,9 +144,21 @@ export function CoachingReviewQueue({
         </p>
       ) : (
         <ul className="divide-y">
-          {filtered.map((r) => (
+          {visible.map((r) => (
             <ReviewRow key={r.id} row={r} />
           ))}
+          {count !== "all" && filtered.length > visible.length && (
+            <li className="px-4 py-2 text-center text-xs text-muted-foreground">
+              Showing {visible.length} of {filtered.length}.{" "}
+              <button
+                type="button"
+                className="underline-offset-4 hover:underline"
+                onClick={() => setCount("all")}
+              >
+                Show all
+              </button>
+            </li>
+          )}
         </ul>
       )}
     </section>

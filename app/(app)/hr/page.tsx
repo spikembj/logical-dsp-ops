@@ -95,7 +95,10 @@ export default async function HrPage({
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* items-start so the worst-10 panel sizes to its own list height
+          and does not stretch the box down to match the much taller
+          review queue beside it. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2">
           <CoachingReviewQueue rows={queueRows} mode={mode} />
         </div>
