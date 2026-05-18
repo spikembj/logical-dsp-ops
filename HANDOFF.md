@@ -229,6 +229,9 @@ has been run against the live DB). New since the previous HANDOFF:
 20260518055531  daily_report (table) + vehicle_issues.source column
                 with backfill + apply_vehicle_grounding_changes
                 updated to tag source='grounding_auto'
+20260518062804  coaching_sessions.category CHECK extended with 11
+                policy-point categories + import_type enum extended
+                with 'policy_points'
 ```
 
 Plus all prior migrations from previous HANDOFF.
@@ -255,28 +258,17 @@ Plus all prior migrations from previous HANDOFF.
 - **Fleet history tab** on van detail was explicitly deferred from
   Phase 2 build ("low priority — defer to polish pass").
 
-### Phase 2.5 — Daily Ops (Passes A + B + C shipped, D-E pending)
-Pass A live: `/daily` roster (van-first inline editor with autocomplete
-+ autosave + per-van driver prefill) + `/daily/paper` print +
-`/admin/waves`.
-Pass B live: `vehicle_shops` table + seed of 19 values · FK on
-`vehicles.current_shop_id` with backfill from the deprecated text
-column · `/admin/shops` CRUD · van Overview "Current shop / location"
-is now a managed dropdown instead of free text.
-Pass C live: `daily_report` table + `vehicle_issues.source` column ·
-`/daily/eod` form (auto-save, debounced text + immediate
-chip/checkbox) · per-van notes flow straight into the issues tracker
-tagged `source='eod'` with an EOD badge in the issues UI · grounding
-auto-issues now tagged `source='grounding_auto'`. Duties-checklist
-card is a placeholder until Pass E lands.
-Remaining passes scoped + agreed:
-  - **Pass D** — extend `coaching_sessions.category` enum with the 11
-    policy-point categories from the user's screenshot (same_day_call_off,
-    no_call_no_show, abandon_route, safety_concern, quality_issue,
-    behavior_issue, van_damage, property_damage, slept_in, quit,
-    unable_to_finish). Existing trigger-clearing logic untouched —
-    only safety/quality/escalation clear triggers. Plus a one-off
-    backfill script for the last 90 days of the POLICY POINTS CSV.
+### Phase 2.5 — Daily Ops (Passes A + B + C + D shipped, E pending)
+Pass A live: `/daily` roster + `/daily/paper` print + `/admin/waves`.
+Pass B live: `vehicle_shops` + FK + `/admin/shops` + managed dropdown.
+Pass C live: `daily_report` + `vehicle_issues.source` + `/daily/eod`
+form + per-van notes flowing into the issues tracker.
+Pass D live: `coaching_sessions.category` extended with 11 policy-
+point categories · Log Session dialog gains a grouped Category
+dropdown (trigger-clearing vs policy-point groups) · 9th import tab
+"Policy Points (CSV)" for the one-off 90-day backfill (strict + fuzzy
+name match, skips unmatched, never auto-creates drivers).
+Remaining:
   - **Pass E** — duties checklist. `duties_template_items` +
     `duties_completion` schema; daily/weekly/monthly templated lists
     with per-item completion (timestamp + user); template editable

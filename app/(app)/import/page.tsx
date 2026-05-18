@@ -8,6 +8,7 @@ import { ConcessionsUpload } from "@/components/app/import/concessions-upload";
 import { CdfUpload } from "@/components/app/import/cdf-upload";
 import { PodDetailsUpload } from "@/components/app/import/pod-details-upload";
 import { VehiclesUpload } from "@/components/app/import/vehicles-upload";
+import { PolicyPointsUpload } from "@/components/app/import/policy-points-upload";
 import { GlobalDropGuard } from "@/components/app/import/global-drop-guard";
 
 export default async function ImportPage() {
@@ -34,6 +35,7 @@ export default async function ImportPage() {
           <TabsTrigger value="cdf">CDF Negative (CSV)</TabsTrigger>
           <TabsTrigger value="pod-details">POD Details (PDF)</TabsTrigger>
           <TabsTrigger value="vehicles">Vehicles (XLSX)</TabsTrigger>
+          <TabsTrigger value="policy-points">Policy Points (CSV)</TabsTrigger>
         </TabsList>
         <TabsContent value="dsp-overview" className="mt-4">
           <DspOverviewUpload />
@@ -58,6 +60,9 @@ export default async function ImportPage() {
         </TabsContent>
         <TabsContent value="vehicles" className="mt-4">
           <VehiclesUpload />
+        </TabsContent>
+        <TabsContent value="policy-points" className="mt-4">
+          <PolicyPointsUpload />
         </TabsContent>
       </Tabs>
     </div>

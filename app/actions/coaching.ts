@@ -30,7 +30,25 @@ const SessionType = z.enum([
   "termination",
 ]);
 
-const Category = z.enum(["safety", "quality", "escalation", "other"]);
+const Category = z.enum([
+  // Trigger-clearing categories
+  "safety",
+  "quality",
+  "escalation",
+  "other",
+  // Policy-point write-up categories
+  "same_day_call_off",
+  "no_call_no_show",
+  "abandon_route",
+  "safety_concern",
+  "quality_issue",
+  "behavior_issue",
+  "van_damage",
+  "property_damage",
+  "slept_in",
+  "quit",
+  "unable_to_finish",
+]);
 
 const CreateSchema = z.object({
   driver_id: z.string().uuid(),

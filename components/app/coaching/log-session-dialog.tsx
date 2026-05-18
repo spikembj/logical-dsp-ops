@@ -25,9 +25,11 @@ import {
 import { todayIso } from "@/lib/format/dates";
 import { cn } from "@/lib/utils";
 import type { CoachingSessionType } from "@/lib/types/database";
-import type {
-  CoachingCategory,
-  CoachingPrefill,
+import {
+  COACHING_CATEGORY_GROUPS,
+  COACHING_CATEGORY_LABELS,
+  type CoachingCategory,
+  type CoachingPrefill,
 } from "@/lib/util/coaching-prefill";
 
 const SESSION_TYPES: { value: CoachingSessionType; label: string }[] = [
@@ -253,6 +255,33 @@ export function LogSessionDialog(props: Props) {
               value={topic}
               onChange={(e) => setTopic(e.currentTarget.value)}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">Category</Label>
+            <select
+              id="category"
+              value={category}
+              onChange={(e) =>
+                setCategory(e.currentTarget.value as CoachingCategory)
+              }
+              className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {COACHING_CATEGORY_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.values.map((v) => (
+                    <option key={v} value={v}>
+                      {COACHING_CATEGORY_LABELS[v]}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <p className="text-[10px] text-muted-foreground">
+              Trigger-clearing categories remove the matching driver from
+              the needs-coaching list. Policy categories are descriptive
+              labels for write-ups.
+            </p>
           </div>
 
           <div className="space-y-2">
