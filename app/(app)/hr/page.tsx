@@ -1,4 +1,5 @@
-import { Inbox, CheckCircle2, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import { Inbox, CheckCircle2, AlertTriangle, ListTodo } from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
   getHrCoachingCounts,
@@ -50,7 +51,7 @@ export default async function HrPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">HR</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -58,8 +59,15 @@ export default async function HrPage({
             (soon) track candidates + onboarding.
           </p>
         </div>
-        {/* Pass A ships the dashboard only — header buttons land in later
-            passes when the candidates kanban and HR duties checklist exist. */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/hr/duties"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <ListTodo className="h-4 w-4" />
+            Duties
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

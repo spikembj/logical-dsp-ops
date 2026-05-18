@@ -8,6 +8,7 @@ import type {
   DutiesCadence,
   DutiesCompletion,
   DutiesItemWithCompletion,
+  DutiesScope,
   DutiesTemplateItem,
   EodVanNote,
   WaveTime,
@@ -219,13 +220,17 @@ export const listEodNotesForDate = cache(
 // Duties checklist
 // ---------------------------------------------------------------------------
 
-/** All active duties items for a cadence, ordered for the UI. */
+/** All active duties items for a cadence + scope, ordered for the UI. */
 export const listDutiesTemplate = cache(
-  async (cadence: DutiesCadence): Promise<DutiesTemplateItem[]> => {
+  async (
+    cadence: DutiesCadence,
+    scope: DutiesScope = "ops",
+  ): Promise<DutiesTemplateItem[]> => {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("duties_template_items")
       .select("*")
+      .eq("scope", scope)
       .eq("cadence", cadence)
       .eq("active", true)
       .order("group_label", { ascending: true, nullsFirst: false })
@@ -266,10 +271,11 @@ export const getDutiesForPeriod = cache(
   async (
     cadence: DutiesCadence,
     periodKey: string,
+    scope: DutiesScope = "ops",
   ): Promise<DutiesItemWithCompletion[]> => {
     const supabase = await createClient();
     const [itemsRes, completionRes] = await Promise.all([
-      listDutiesTemplate(cadence),
+      listDutiesTemplate(cadence, scope),
       supabase
         .from("duties_completion")
         .select("*")
@@ -298,12 +304,13 @@ export const getDutiesSummary = cache(
   async (
     cadence: DutiesCadence,
     periodKey: string,
+    scope: DutiesScope = "ops",
   ): Promise<{
     total: number;
     completed: number;
     byGroup: { group: string | null; total: number; completed: number }[];
   }> => {
-    const items = await getDutiesForPeriod(cadence, periodKey);
+    const items = await getDutiesForPeriod(cadence, periodKey, scope);
     const buckets = new Map<
       string | null,
       { total: number; completed: number }

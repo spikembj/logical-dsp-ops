@@ -80,6 +80,18 @@ export interface EodVanNote {
 
 export type DutiesCadence = "daily" | "weekly" | "monthly";
 
+/**
+ * Which surface owns the checklist item.
+ *   ops — /duties (dispatch + ops mgmt; the original module)
+ *   hr  — /hr/duties (HR + ops mgmt only; invisible to dispatchers)
+ *
+ * Backed by the `scope` column on duties_template_items. The same
+ * underlying tables / queries / actions serve both surfaces; the only
+ * difference is the filter. duties_completion has no scope — it joins
+ * through template_item_id which carries the scope.
+ */
+export type DutiesScope = "ops" | "hr";
+
 /** Sub-group within a daily checklist, or null for weekly/monthly. */
 export type DutiesGroup =
   | "preload_out"
@@ -91,6 +103,7 @@ export type DutiesGroup =
 
 export interface DutiesTemplateItem {
   id: string;
+  scope: DutiesScope;
   cadence: DutiesCadence;
   group_label: DutiesGroup;
   owner_label: string;

@@ -25,6 +25,7 @@ import {
   type DutiesCadence,
   type DutiesGroup,
   type DutiesItemWithCompletion,
+  type DutiesScope,
 } from "@/lib/queries/daily-ops-types";
 import { cn } from "@/lib/utils";
 
@@ -47,12 +48,20 @@ export function DutiesChecklist({
   items,
   canWrite,
   canManage,
+  scope = "ops",
+  // When true, daily items render as one flat list (no preload/loadout
+  // sub-sections). HR's checklist uses this — those buckets are
+  // dispatch-specific. Weekly/monthly already flat-render so the flag
+  // only matters for daily.
+  flatList = false,
 }: {
   cadence: DutiesCadence;
   periodKey: string;
   items: DutiesItemWithCompletion[];
   canWrite: boolean;
   canManage: boolean;
+  scope?: DutiesScope;
+  flatList?: boolean;
 }) {
   const router = useRouter();
   const [, startSavingTransition] = useTransition();
@@ -86,7 +95,7 @@ export function DutiesChecklist({
     });
   }
 
-  if (cadence === "daily") {
+  if (cadence === "daily" && !flatList) {
     return (
       <div className="space-y-4">
         {DUTIES_GROUP_ORDER.map((g) => {
@@ -133,6 +142,7 @@ export function DutiesChecklist({
                   cadence="daily"
                   group={g}
                   sortOrder={nextSortOrder}
+                  scope={scope}
                 />
               )}
             </section>
@@ -199,6 +209,8 @@ export function DutiesChecklist({
             group={null}
             sortOrder={allItemsMaxSort + 10}
             requireOwner
+            scope={scope}
+            defaultOwner={scope === "hr" ? "HR" : "Dispatcher"}
           />
         </section>
       )}
@@ -294,22 +306,26 @@ function AddTaskRow({
   group,
   sortOrder,
   requireOwner = false,
+  scope = "ops",
+  defaultOwner = "Dispatcher",
 }: {
   cadence: DutiesCadence;
   group: DutiesGroup;
   sortOrder: number;
   requireOwner?: boolean;
+  scope?: DutiesScope;
+  defaultOwner?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
-  const [owner, setOwner] = useState("Dispatcher");
+  const [owner, setOwner] = useState(defaultOwner);
   const [pending, startSavingTransition] = useTransition();
   const descRef = useRef<HTMLInputElement>(null);
 
   function reset() {
     setDescription("");
-    setOwner("Dispatcher");
+    setOwner(defaultOwner);
   }
 
   function handleOpen() {
@@ -328,8 +344,10 @@ function AddTaskRow({
     }
     startSavingTransition(async () => {
       const res = await upsertDutyItem({
+        scope,
         cadence,
-        group_label: cadence === "daily" ? group : null,
+        // HR has no group buckets — keep group_label null even on daily.
+        group_label: cadence === "daily" && scope === "ops" ? group : null,
         owner_label: owner.trim(),
         description: description.trim(),
         sort_order: sortOrder,

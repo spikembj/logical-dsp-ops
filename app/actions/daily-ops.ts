@@ -617,6 +617,7 @@ export async function toggleDutyCompletion(
 
   revalidatePath("/duties");
   revalidatePath("/daily/eod");
+  revalidatePath("/hr/duties");
   return { ok: true };
 }
 
@@ -626,8 +627,11 @@ const Group = z
   .nullable()
   .optional();
 
+const Scope = z.enum(["ops", "hr"]).default("ops");
+
 const UpsertDutyItemSchema = z.object({
   id: z.string().uuid().optional(),
+  scope: Scope,
   cadence: Cadence,
   group_label: Group,
   owner_label: z.string().trim().min(1, "Owner is required").max(60),
@@ -645,13 +649,18 @@ export async function upsertDutyItem(
   if (!parsed.success) return fail(parsed.error.issues);
 
   const supabase = await createClient();
+  // HR daily items intentionally have no sub-group — the
+  // preload/loadout/etc. buckets are dispatch-specific. Ops daily
+  // forces a group so the section UI stays consistent.
+  const groupLabel =
+    parsed.data.cadence === "daily" && parsed.data.scope === "ops"
+      ? (parsed.data.group_label ?? "preload_out")
+      : null;
+
   const payload: Record<string, unknown> = {
+    scope: parsed.data.scope,
     cadence: parsed.data.cadence,
-    // Force daily to have a group; weekly/monthly null it out.
-    group_label:
-      parsed.data.cadence === "daily"
-        ? (parsed.data.group_label ?? "preload_out")
-        : null,
+    group_label: groupLabel,
     owner_label: parsed.data.owner_label,
     description: parsed.data.description,
     active: parsed.data.active,
@@ -665,8 +674,12 @@ export async function upsertDutyItem(
     .upsert(payload, { onConflict: "id" });
   if (error) return { ok: false, error: error.message };
 
+  // Revalidate both surfaces — cheap, and means an HR add does not
+  // leave a stale dispatch summary card on /daily/eod if (in theory)
+  // a single page ever shows both scopes.
   revalidatePath("/duties");
   revalidatePath("/daily/eod");
+  revalidatePath("/hr/duties");
   return { ok: true };
 }
 
@@ -691,5 +704,6 @@ export async function deleteDutyItem(
 
   revalidatePath("/duties");
   revalidatePath("/daily/eod");
+  revalidatePath("/hr/duties");
   return { ok: true };
 }

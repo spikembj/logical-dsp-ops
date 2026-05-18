@@ -14,8 +14,10 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. **Phase 3 (HR & Hiring) Pass A shipped** — coaching review
-queue + worst-10 panel live at `/hr`. Live in production at
+all shipped. **Phase 3 (HR & Hiring) Passes A + B shipped** — coaching
+review queue + worst-10 panel live at `/hr`; HR-specific duties
+checklist live at `/hr/duties` (scope column on duties_template_items,
+flat-list rendering, 10 seed items). Live in production at
 **`https://logical-ops.vercel.app`**. In active daily use by the user,
 their boss, and Manny (test dispatcher).
 
@@ -87,6 +89,12 @@ their boss, and Manny (test dispatcher).
   worst-10 panel (90-day raw count, excludes trainings/discussions/voids,
   category filter via `?cat=`). Management-only — dispatchers gated out
   via middleware on `/hr/*` and the sidebar link is role-hidden.
+- **HR Duties** at `/hr/duties` (Phase 3 Pass B) — HR-specific checklist
+  on the same engine as `/duties` via a new `scope` column on
+  `duties_template_items` (`'ops' | 'hr'`). Daily renders as a flat list
+  (no preload/loadout sub-sections — those are dispatch-specific). 10
+  daily items seeded from the dispatcher's HR spreadsheet. Inline add /
+  delete / edit follow the same pattern as `/duties`.
 - **Sidebar** is flat: Performance / Daily Ops / Fleet / Drivers /
   Import, plus a Manage section with HR + Management. Wave times and
   Shops links live on their respective dashboards.
@@ -303,10 +311,13 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 31 migrations in `supabase/migrations/` have been run against
+**All 32 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260518233330  hr_duties_scope (duties_template_items.scope column +
+                partial index + 10-item HR daily seed lifted from
+                the dispatcher's spreadsheet)
 20260518223018  hr_coaching_review (coaching_sessions.hr_reviewed_at +
                 hr_reviewed_by + hr_review_notes + two partial indexes
                 for the HR queue + worst-10 query)
@@ -408,7 +419,9 @@ Plus all prior migrations.
 │   │   │   ├── [id]/                 # Driver detail (4 tabs)
 │   │   │   └── page.tsx              # Unified Drivers + Helpers list
 │   │   ├── duties/page.tsx           # Duties checklist + inline edit
-│   │   ├── hr/page.tsx               # HR landing — Phase 3 Pass A
+│   │   ├── hr/
+│   │   │   ├── page.tsx              # HR landing — Phase 3 Pass A
+│   │   │   └── duties/page.tsx       # HR-specific checklist — Pass B
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
