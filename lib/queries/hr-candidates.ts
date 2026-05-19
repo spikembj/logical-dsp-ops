@@ -2,10 +2,13 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  ArchivedCandidateRow,
   CandidateListItem,
+  CandidateOnboardingTemplateItem,
   CandidateRow,
   CandidateStatusColor,
   CandidateStatusRow,
+  OnboardingItemWithCompletion,
 } from "./hr-candidates-types";
 
 /**
@@ -181,5 +184,171 @@ export const lookupPriorDeclinesByPhone = cache(
       created_at: r.created_at,
       status_name: statusNameById.get(r.status_id) ?? "?",
     }));
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Single-candidate detail + onboarding (Pass C.B)
+// ---------------------------------------------------------------------------
+
+/** Full candidate row with the status name + color joined in. */
+export const getCandidateById = cache(
+  async (
+    id: string,
+  ): Promise<
+    | (CandidateRow & {
+        status_name: string;
+        status_color: CandidateStatusColor;
+        status_is_onboarding: boolean;
+      })
+    | null
+  > => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("candidates")
+      .select(
+        `*, status:candidate_statuses ( name, color, is_onboarding )`,
+      )
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) {
+      if (error) console.error("getCandidateById failed:", error);
+      return null;
+    }
+    type Joined = CandidateRow & {
+      status:
+        | { name: string; color: CandidateStatusColor; is_onboarding: boolean }
+        | { name: string; color: CandidateStatusColor; is_onboarding: boolean }[]
+        | null;
+    };
+    const row = data as unknown as Joined;
+    const status = Array.isArray(row.status) ? row.status[0] : row.status;
+    return {
+      ...row,
+      status_name: status?.name ?? "Unknown",
+      status_color: (status?.color ?? "slate") as CandidateStatusColor,
+      status_is_onboarding: !!status?.is_onboarding,
+    };
+  },
+);
+
+/** All onboarding template items + this candidate's completion stamps. */
+export const getOnboardingChecklistFor = cache(
+  async (candidateId: string): Promise<OnboardingItemWithCompletion[]> => {
+    const supabase = await createClient();
+    const [itemsRes, completionsRes] = await Promise.all([
+      supabase
+        .from("candidate_onboarding_template_items")
+        .select("*")
+        .order("sort_order")
+        .order("description"),
+      supabase
+        .from("candidate_onboarding_completion")
+        .select(
+          `*, completed_by_user:users!candidate_onboarding_completion_completed_by_fkey ( full_name, email )`,
+        )
+        .eq("candidate_id", candidateId),
+    ]);
+    if (itemsRes.error) {
+      console.error("getOnboardingChecklistFor items:", itemsRes.error);
+      return [];
+    }
+    type CompletionJoined = {
+      id: string;
+      candidate_id: string;
+      template_item_id: string;
+      completed_at: string;
+      completed_by: string | null;
+      completed_by_user:
+        | { full_name: string | null; email: string }
+        | { full_name: string | null; email: string }[]
+        | null;
+    };
+    const completionByItem = new Map<
+      string,
+      { completion: CompletionJoined; userName: string | null }
+    >();
+    for (const c of ((completionsRes.data ?? []) as unknown as CompletionJoined[])) {
+      const u = Array.isArray(c.completed_by_user)
+        ? c.completed_by_user[0]
+        : c.completed_by_user;
+      completionByItem.set(c.template_item_id, {
+        completion: c,
+        userName: u?.full_name ?? u?.email ?? null,
+      });
+    }
+    return ((itemsRes.data ?? []) as CandidateOnboardingTemplateItem[]).map(
+      (t) => {
+        const hit = completionByItem.get(t.id);
+        return {
+          ...t,
+          completion: hit
+            ? {
+                id: hit.completion.id,
+                candidate_id: hit.completion.candidate_id,
+                template_item_id: hit.completion.template_item_id,
+                completed_at: hit.completion.completed_at,
+                completed_by: hit.completion.completed_by,
+              }
+            : null,
+          completed_by_name: hit?.userName ?? null,
+        };
+      },
+    );
+  },
+);
+
+/** Every onboarding template item (active + inactive), for the admin panel. */
+export const listOnboardingTemplate = cache(
+  async (): Promise<CandidateOnboardingTemplateItem[]> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("candidate_onboarding_template_items")
+      .select("*")
+      .order("sort_order")
+      .order("description");
+    if (error) {
+      console.error("listOnboardingTemplate failed:", error);
+      return [];
+    }
+    return (data as CandidateOnboardingTemplateItem[]) ?? [];
+  },
+);
+
+/**
+ * Every archived candidate (hired + declined + manually-archived). Joined
+ * with the final status's name/color and a computed outcome bucket.
+ * No time window — the user picked "all time" for the default view.
+ */
+export const listArchivedCandidates = cache(
+  async (): Promise<ArchivedCandidateRow[]> => {
+    const supabase = await createClient();
+    const [candidatesRes, statuses] = await Promise.all([
+      supabase
+        .from("candidates")
+        .select("*")
+        .not("archived_at", "is", null)
+        .order("archived_at", { ascending: false }),
+      listCandidateStatuses(),
+    ]);
+    if (candidatesRes.error) {
+      console.error("listArchivedCandidates failed:", candidatesRes.error);
+      return [];
+    }
+    const statusById = new Map(statuses.map((s) => [s.id, s]));
+    return ((candidatesRes.data ?? []) as CandidateRow[]).map((c) => {
+      const s = statusById.get(c.status_id);
+      const outcome: ArchivedCandidateRow["outcome"] = c.converted_driver_id
+        ? "hired"
+        : s?.treat_as_declined
+          ? "declined"
+          : "other";
+      return {
+        ...c,
+        status_name: s?.name ?? "Unknown",
+        status_color: (s?.color ?? "slate") as CandidateStatusColor,
+        outcome,
+      };
+    });
   },
 );

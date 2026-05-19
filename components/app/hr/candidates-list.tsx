@@ -211,11 +211,12 @@ function CandidateRow({
     <li className="px-3 py-2 flex flex-wrap items-center gap-3">
       <div className="flex-1 min-w-0 space-y-0.5">
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Until /hr/candidates/[id] ships in Pass C.B, the name is
-              plain text. Wrapping it in a Link now would 404. */}
-          <span className="text-sm font-medium truncate">
+          <Link
+            href={`/hr/candidates/${candidate.id}`}
+            className="text-sm font-medium hover:underline truncate"
+          >
             {candidate.full_name}
-          </span>
+          </Link>
           {candidate.phone_display && (
             <a
               href={`tel:${candidate.phone_digits ?? candidate.phone_display}`}

@@ -78,9 +78,52 @@ export interface CandidateStatusRow {
   color: CandidateStatusColor;
   sort_order: number;
   treat_as_declined: boolean;
+  /**
+   * When true, candidates whose status has this flag see the onboarding
+   * checklist on their detail page. Lets HR optionally split onboarding
+   * across multiple sequential statuses without a code change.
+   */
+  is_onboarding: boolean;
   active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface CandidateOnboardingTemplateItem {
+  id: string;
+  description: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CandidateOnboardingCompletion {
+  id: string;
+  candidate_id: string;
+  template_item_id: string;
+  completed_at: string;
+  completed_by: string | null;
+}
+
+/** A template item joined with its completion (if any) for a candidate. */
+export interface OnboardingItemWithCompletion
+  extends CandidateOnboardingTemplateItem {
+  completion: CandidateOnboardingCompletion | null;
+  completed_by_name: string | null;
+}
+
+/** Convenience view for the archive list — drops the dedup machinery
+ *  and adds the outcome bucket. */
+export interface ArchivedCandidateRow extends CandidateRow {
+  status_name: string;
+  status_color: CandidateStatusColor;
+  /**
+   * 'hired'    — converted to a driver (converted_driver_id set)
+   * 'declined' — final status had treat_as_declined=true
+   * 'other'    — archived without conversion AND not from a declined status
+   */
+  outcome: "hired" | "declined" | "other";
 }
 
 export interface CandidateRow {

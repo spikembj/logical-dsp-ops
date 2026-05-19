@@ -165,6 +165,7 @@ const UpsertStatusSchema = z.object({
   color: z.enum(CANDIDATE_STATUS_COLORS),
   sort_order: z.number().int().min(0).max(10_000).optional(),
   treat_as_declined: z.boolean().default(false),
+  is_onboarding: z.boolean().default(false),
   active: z.boolean().default(true),
 });
 
@@ -180,6 +181,7 @@ export async function upsertCandidateStatus(
     name: parsed.data.name,
     color: parsed.data.color,
     treat_as_declined: parsed.data.treat_as_declined,
+    is_onboarding: parsed.data.is_onboarding,
     active: parsed.data.active,
   };
   if (parsed.data.sort_order !== undefined)
@@ -298,4 +300,174 @@ export async function lookupPriorDeclinesAction(
     }),
   );
   return { ok: true, data: { matches } };
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding — Pass C.B
+// ---------------------------------------------------------------------------
+
+const ToggleOnboardingSchema = z.object({
+  candidate_id: z.string().uuid(),
+  template_item_id: z.string().uuid(),
+  done: z.boolean(),
+});
+
+export async function toggleOnboardingItem(
+  input: z.infer<typeof ToggleOnboardingSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = ToggleOnboardingSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (parsed.data.done) {
+    const { error } = await supabase
+      .from("candidate_onboarding_completion")
+      .upsert(
+        {
+          candidate_id: parsed.data.candidate_id,
+          template_item_id: parsed.data.template_item_id,
+          completed_by: user?.id ?? null,
+        },
+        { onConflict: "candidate_id,template_item_id", ignoreDuplicates: true },
+      );
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("candidate_onboarding_completion")
+      .delete()
+      .eq("candidate_id", parsed.data.candidate_id)
+      .eq("template_item_id", parsed.data.template_item_id);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/hr/candidates/${parsed.data.candidate_id}`);
+  revalidatePath("/hr/candidates");
+  return { ok: true };
+}
+
+const UpsertOnboardingTemplateSchema = z.object({
+  id: z.string().uuid().optional(),
+  description: z.string().trim().min(1, "Description is required").max(200),
+  sort_order: z.number().int().min(0).max(100_000).optional(),
+  active: z.boolean().default(true),
+});
+
+export async function upsertOnboardingTemplateItem(
+  input: z.infer<typeof UpsertOnboardingTemplateSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = UpsertOnboardingTemplateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const payload: Record<string, unknown> = {
+    description: parsed.data.description,
+    active: parsed.data.active,
+  };
+  if (parsed.data.sort_order !== undefined)
+    payload.sort_order = parsed.data.sort_order;
+  if (parsed.data.id) payload.id = parsed.data.id;
+
+  const { error } = await supabase
+    .from("candidate_onboarding_template_items")
+    .upsert(payload, { onConflict: "id" });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/hr/candidates");
+  return { ok: true };
+}
+
+const DeleteOnboardingTemplateSchema = z.object({ item_id: z.string().uuid() });
+
+export async function deleteOnboardingTemplateItem(
+  input: z.infer<typeof DeleteOnboardingTemplateSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = DeleteOnboardingTemplateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  // ON DELETE CASCADE on candidate_onboarding_completion → historical
+  // completions for this item go with it.
+  const { error } = await supabase
+    .from("candidate_onboarding_template_items")
+    .delete()
+    .eq("id", parsed.data.item_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/hr/candidates");
+  return { ok: true };
+}
+
+const ReorderOnboardingSchema = z.object({
+  ordered_ids: z.array(z.string().uuid()).min(1),
+});
+
+export async function reorderOnboardingTemplate(
+  input: z.infer<typeof ReorderOnboardingSchema>,
+): Promise<ActionResult> {
+  await requireManagement();
+  const parsed = ReorderOnboardingSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const updates = parsed.data.ordered_ids.map((id, idx) =>
+    supabase
+      .from("candidate_onboarding_template_items")
+      .update({ sort_order: (idx + 1) * 10 })
+      .eq("id", id),
+  );
+  const results = await Promise.all(updates);
+  const firstErr = results.find((r) => r.error)?.error;
+  if (firstErr) return { ok: false, error: firstErr.message };
+
+  revalidatePath("/hr/candidates");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Convert candidate → driver (atomic via RPC)
+// ---------------------------------------------------------------------------
+
+const ConvertSchema = z.object({
+  candidate_id: z.string().uuid(),
+  position: z.enum(["driver", "helper"]),
+  hire_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Hire date must be YYYY-MM-DD"),
+  approved_vehicle_types: z
+    .array(z.enum(["cdv", "edv", "standard_parcel"]))
+    .min(1, "Pick at least one vehicle type"),
+});
+
+export async function convertCandidateToDriver(
+  input: z.infer<typeof ConvertSchema>,
+): Promise<ActionResult<{ driver_id: string }>> {
+  await requireManagement();
+  const parsed = ConvertSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("convert_candidate_to_driver", {
+    p_candidate_id: parsed.data.candidate_id,
+    p_position: parsed.data.position,
+    p_hire_date: parsed.data.hire_date,
+    p_approved_vehicle_types: parsed.data.approved_vehicle_types,
+  });
+  if (error) {
+    // The RPC raises descriptive exceptions ("Onboarding checklist
+    // incomplete: 3 items remaining" etc.) — surface them verbatim.
+    return { ok: false, error: error.message };
+  }
+  const driverId = data as unknown as string;
+
+  revalidatePath("/hr/candidates");
+  revalidatePath(`/hr/candidates/${parsed.data.candidate_id}`);
+  revalidatePath("/hr/candidates/archive");
+  revalidatePath("/drivers");
+  revalidatePath(`/drivers/${driverId}`);
+  return { ok: true, data: { driver_id: driverId } };
 }

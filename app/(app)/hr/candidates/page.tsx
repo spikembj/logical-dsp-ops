@@ -1,28 +1,30 @@
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Archive } from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
   listActiveCandidates,
   listCandidateStatuses,
+  listOnboardingTemplate,
 } from "@/lib/queries/hr-candidates";
 import { CandidatesList } from "@/components/app/hr/candidates-list";
 import { CandidateFormDialog } from "@/components/app/hr/candidate-form-dialog";
 import { CandidateStatusesAdmin } from "@/components/app/hr/candidate-statuses-admin";
+import { OnboardingTemplateAdmin } from "@/components/app/hr/onboarding-template-admin";
 
 /**
- * Candidates pipeline. Pass C.A scope:
- *   - Collapsible-by-status list of every active candidate
- *   - Inline status admin (drag, rename, recolor, toggle declined-flag)
- *   - Add candidate dialog with live "previously declined" warning
+ * Candidates pipeline. Collapsible-by-status list of every active
+ * candidate, with inline editors for both the status list and the
+ * onboarding template above.
  *
- * Detail page, onboarding checklist, convert-to-driver, and archive
- * view land in Pass C.B.
+ * Detail page lives at `/hr/candidates/[id]`; archive at
+ * `/hr/candidates/archive`.
  */
 export default async function CandidatesPage() {
   await requireManagement();
-  const [statuses, candidates] = await Promise.all([
+  const [statuses, candidates, onboardingTemplate] = await Promise.all([
     listCandidateStatuses(),
     listActiveCandidates(),
+    listOnboardingTemplate(),
   ]);
 
   return (
@@ -37,6 +39,13 @@ export default async function CandidatesPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <CandidateFormDialog statuses={statuses} />
           <Link
+            href="/hr/candidates/archive"
+            className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Archive className="h-4 w-4" />
+            Archive
+          </Link>
+          <Link
             href="/hr"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
@@ -47,6 +56,7 @@ export default async function CandidatesPage() {
       </div>
 
       <CandidateStatusesAdmin statuses={statuses} />
+      <OnboardingTemplateAdmin items={onboardingTemplate} />
 
       <CandidatesList candidates={candidates} statuses={statuses} />
     </div>

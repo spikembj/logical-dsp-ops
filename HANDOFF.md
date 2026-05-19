@@ -14,12 +14,14 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A shipped** —
+all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A + C.B shipped** —
 coaching review queue + worst-10 panel at `/hr`; HR-specific duties
-checklist at `/hr/duties`; candidates pipeline kanban at
-`/hr/candidates` with inline status admin, phone-normalized live dedup,
-9 seeded statuses + 10 seeded onboarding template items. Live in
-production at **`https://logical-ops.vercel.app`**. In active daily
+checklist at `/hr/duties`; candidates pipeline kanban at `/hr/candidates`
+with inline status admin + onboarding-template admin, phone-normalized
+live dedup, candidate detail page with editable contact fields +
+onboarding checklist, Convert-to-driver action (atomic via RPC),
+`/hr/candidates/archive` with All / Hired / Declined / Other tabs. Live
+in production at **`https://logical-ops.vercel.app`**. In active daily
 use by the user, their boss, and Manny (test dispatcher).
 
 **What works end-to-end:**
@@ -90,18 +92,31 @@ use by the user, their boss, and Manny (test dispatcher).
   worst-10 panel (90-day raw count, excludes trainings/discussions/voids,
   category filter via `?cat=`). Management-only — dispatchers gated out
   via middleware on `/hr/*` and the sidebar link is role-hidden.
-- **HR Candidates** at `/hr/candidates` (Phase 3 Pass C.A) —
+- **HR Candidates** at `/hr/candidates` (Phase 3 Pass C.A + C.B) —
   collapsible-by-status pipeline view matching the dispatcher's
   spreadsheet kanban. 9 seeded statuses (TO CHECK IN ON →
   WAITING ON RESPONSE → NO SHOW FOR INTERVIEW / DUT4 / DUT7 / TO
   THINK ABOUT / DONT HIRE / TO HIRE / ONBOARDING) editable inline
-  via drag-to-reorder, rename, recolor (12-color palette), Active
-  toggle, `treat_as_declined` toggle. Add candidate dialog runs a
-  debounced phone lookup against prior declined rows and warns if
-  there is a hit. Phone normalized to 10 digits in a DB trigger
-  (`normalize_phone`) so dedup is exact. Detail page, onboarding
-  checklist UI, Convert-to-driver action, and Archive view land in
-  Pass C.B.
+  via drag-to-reorder, rename, recolor (12-color palette), Active /
+  `treat_as_declined` / `is_onboarding` toggles. Add candidate dialog
+  runs a debounced phone lookup against prior declined rows and warns
+  on the spot. Phone normalized to 10 digits in a DB trigger
+  (`normalize_phone`) so dedup is exact.
+- **Candidate detail** at `/hr/candidates/[id]` (Pass C.B) — editable
+  contact + interview fields, optimistic onboarding checklist UI
+  (shown when status has `is_onboarding=true`), Convert-to-driver
+  dialog (gated on all active onboarding items checked; creates the
+  drivers row with `candidate_id` FK via the atomic
+  `convert_candidate_to_driver()` RPC, then archives the candidate).
+- **Onboarding template editor** — collapsible inline panel on
+  `/hr/candidates` below Manage Statuses. Drag / rename / Active toggle /
+  delete (cascades to completion stamps). 10 default items seeded
+  (I-9, W-4, drug test scheduled/passed, background submitted/cleared,
+  direct deposit, trainer assigned, start date confirmed, uniform issued).
+- **Candidates archive** at `/hr/candidates/archive` — every archived
+  candidate (hired + declined + manually-archived) with All / Hired /
+  Declined / Other tabs and client-side search. All-time. Hired rows
+  link to the resulting `/drivers/[id]`.
 - **HR Duties** at `/hr/duties` (Phase 3 Pass B) — HR-specific checklist
   on the same engine as `/duties` via a new `scope` column on
   `duties_template_items` (`'ops' | 'hr'`). Daily renders as a flat list
@@ -324,10 +339,13 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 33 migrations in `supabase/migrations/` have been run against
+**All 34 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260519013623  hr_candidates_pass_b (candidate_statuses.is_onboarding
+                column + convert_candidate_to_driver(uuid, text, date,
+                text[]) RPC for atomic candidate→driver conversion)
 20260519003358  hr_candidates (candidate_statuses + candidates +
                 candidate_onboarding_template_items +
                 candidate_onboarding_completion + drivers.candidate_id +
@@ -440,7 +458,10 @@ Plus all prior migrations.
 │   │   ├── hr/
 │   │   │   ├── page.tsx              # HR landing — Phase 3 Pass A
 │   │   │   ├── duties/page.tsx       # HR-specific checklist — Pass B
-│   │   │   └── candidates/page.tsx   # Candidates kanban — Pass C.A
+│   │   │   └── candidates/
+│   │   │       ├── page.tsx          # Kanban — Pass C.A
+│   │   │       ├── [id]/page.tsx     # Detail page — Pass C.B
+│   │   │       └── archive/page.tsx  # Archive view — Pass C.B
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
@@ -472,7 +493,12 @@ Plus all prior migrations.
 │   │   ├── hr/                       # coaching-review-queue,
 │   │   │                             # worst-offenders-panel,
 │   │   │                             # candidates-list, candidate-form-dialog,
-│   │   │                             # candidate-statuses-admin
+│   │   │                             # candidate-statuses-admin,
+│   │   │                             # candidate-onboarding-checklist,
+│   │   │                             # onboarding-template-admin,
+│   │   │                             # convert-to-driver-dialog,
+│   │   │                             # candidate-delete-button,
+│   │   │                             # candidates-archive-client
 │   │   └── …driver-tabs, driver-form-dialog, sidebar-nav, sign-out, theme-*
 │   └── ui/                           # shadcn (base-ui flavor) primitives
 ├── lib/
