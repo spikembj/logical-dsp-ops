@@ -5,6 +5,7 @@ import {
   Settings2,
   ClipboardList,
   HelpCircle,
+  FileSignature,
 } from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
@@ -65,6 +66,13 @@ export default async function CandidatesPage() {
           >
             <HelpCircle className="h-4 w-4" />
             Interview questions
+          </Link>
+          <Link
+            href="/hr/candidates/forms"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <FileSignature className="h-4 w-4" />
+            Forms
           </Link>
           <Link
             href="/hr/candidates/archive"

@@ -46,6 +46,11 @@ export async function updateSession(request: NextRequest) {
     // middleware can't see — bouncing to /login here would lock out
     // anyone clicking those links.
     pathname.startsWith("/set-password") ||
+    // /forms/<token> is the public candidate-facing form (Phase 3
+    // Pass E). The token is the credential; the page resolves it via
+    // the service-role client. Bouncing to /login here would block
+    // every interviewee from filling out their form.
+    pathname.startsWith("/forms") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 

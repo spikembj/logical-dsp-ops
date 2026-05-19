@@ -11,11 +11,14 @@ import {
   CANDIDATE_STATUS_CHIP_CLASSES,
 } from "@/lib/queries/hr-candidates";
 import { getInterviewResponseFor } from "@/lib/queries/hr-interviews";
+import { getCandidateFormStatuses } from "@/lib/queries/hr-candidate-forms";
 import { CandidateFormDialog } from "@/components/app/hr/candidate-form-dialog";
 import { CandidateOnboardingChecklist } from "@/components/app/hr/candidate-onboarding-checklist";
 import { ConvertToDriverDialog } from "@/components/app/hr/convert-to-driver-dialog";
 import { CandidateDeleteButton } from "@/components/app/hr/candidate-delete-button";
 import { DispatcherInterviewCard } from "@/components/app/hr/dispatcher-interview-card";
+import { CandidateFormsCard } from "@/components/app/hr/candidate-forms-card";
+import { headers } from "next/headers";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
@@ -36,12 +39,21 @@ interface PageProps {
 export default async function CandidateDetailPage({ params }: PageProps) {
   await requireManagement();
   const { id } = await params;
-  const [candidate, statuses, interview] = await Promise.all([
+  const [candidate, statuses, interview, formStatuses, hdrs] = await Promise.all([
     getCandidateById(id),
     listCandidateStatuses(),
     getInterviewResponseFor(id),
+    getCandidateFormStatuses(id),
+    headers(),
   ]);
   if (!candidate) notFound();
+
+  // Build the public origin for the QR code — prefer the host header
+  // so dev (localhost), preview deploys, and production all generate
+  // a working link.
+  const host = hdrs.get("host") ?? "localhost:3000";
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const publicOrigin = `${proto}://${host}`;
 
   // Onboarding only needed if the status flag is set.
   const onboarding = candidate.status_is_onboarding
@@ -122,6 +134,12 @@ export default async function CandidateDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2 space-y-4">
           <DetailCard candidate={candidate} />
+          <CandidateFormsCard
+            candidateId={candidate.id}
+            candidateName={candidate.full_name}
+            rows={formStatuses}
+            publicOrigin={publicOrigin}
+          />
           <DispatcherInterviewCard
             candidateId={candidate.id}
             response={interview}

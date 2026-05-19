@@ -14,7 +14,7 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A + C.B + D shipped** —
+all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A + C.B + D + E shipped — HR module is complete.** —
 coaching review queue + worst-10 panel at `/hr`; HR-specific duties
 checklist at `/hr/duties`; candidates pipeline kanban at `/hr/candidates`
 with inline status admin + onboarding-template admin, phone-normalized
@@ -136,6 +136,23 @@ use by the user, their boss, and Manny (test dispatcher).
   pattern as the other admin pages, plus a per-row Y/N vs Text picker.
 - **HR-side dispatcher interview card** on `/hr/candidates/[id]` —
   read-only display of the response + answers + who/when + Edit link.
+- **Candidate-facing forms** (Phase 3 Pass E) — per-candidate QR-coded
+  URL. Two forms seeded: `interviewee` and `onboarding`. Public page
+  at `/forms/<token>` uses the service-role client to bypass RLS,
+  resolves the token to a candidate + form, renders Y/N + text
+  questions, accepts edit-in-place repeated submissions.
+- **Candidate forms card** on `/hr/candidates/[id]` — Generate-QR
+  (opens modal with QR + copy-link), Show link / QR on already-
+  generated, Regenerate (rotates token, wipes submitted_at),
+  Delete, View answers. QR rendered with the existing `qrcode`
+  package (same lib used for VIN labels). Origin auto-detected via
+  request headers so QRs work on localhost, preview deploys, and prod.
+- **Forms admin** at `/hr/candidates/forms` — list of every form.
+  Click into one → `/hr/candidates/forms/[slug]` for the question
+  editor (drag / rename / Y-N-or-Text / active / delete).
+- **HR view-answers page** at `/hr/candidates/[id]/forms/[slug]` —
+  read-only display of submitted answers, unanswered questions show
+  "— no answer —".
 - **HR Duties** at `/hr/duties` (Phase 3 Pass B) — HR-specific checklist
   on the same engine as `/duties` via a new `scope` column on
   `duties_template_items` (`'ops' | 'hr'`). Daily renders as a flat list
@@ -358,10 +375,13 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 35 migrations in `supabase/migrations/` have been run against
+**All 36 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260519045838  hr_candidate_forms (candidate_forms + _questions +
+                _invitations + _answers tables · 2 seeded forms with
+                ~30 questions total · public-token submission flow)
 20260519035336  hr_interview_responses (dispatcher_interview_questions +
                 _responses + _answers tables · candidates_select_for_dispatchers
                 RLS · candidate_statuses_select loosened to is_operations() ·
@@ -488,7 +508,11 @@ Plus all prior migrations.
 │   │   │       ├── archive/page.tsx               # Archive view — Pass C.B
 │   │   │       ├── statuses/page.tsx              # Statuses admin
 │   │   │       ├── onboarding-template/page.tsx   # Onboarding template admin
-│   │   │       └── interview-questions/page.tsx   # Interview questions — Pass D
+│   │   │       ├── interview-questions/page.tsx   # Interview questions — Pass D
+│   │   │       ├── [id]/forms/[slug]/page.tsx     # HR view-answers — Pass E
+│   │   │       └── forms/
+│   │   │           ├── page.tsx                   # Forms list — Pass E
+│   │   │           └── [slug]/page.tsx            # Per-form question editor — Pass E
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
