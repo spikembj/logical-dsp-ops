@@ -1,30 +1,35 @@
 import Link from "next/link";
-import { ChevronLeft, Archive } from "lucide-react";
+import {
+  ChevronLeft,
+  Archive,
+  Settings2,
+  ClipboardList,
+} from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
   listActiveCandidates,
   listCandidateStatuses,
-  listOnboardingTemplate,
 } from "@/lib/queries/hr-candidates";
 import { CandidatesList } from "@/components/app/hr/candidates-list";
 import { CandidateFormDialog } from "@/components/app/hr/candidate-form-dialog";
-import { CandidateStatusesAdmin } from "@/components/app/hr/candidate-statuses-admin";
-import { OnboardingTemplateAdmin } from "@/components/app/hr/onboarding-template-admin";
 
 /**
  * Candidates pipeline. Collapsible-by-status list of every active
- * candidate, with inline editors for both the status list and the
- * onboarding template above.
+ * candidate.
  *
- * Detail page lives at `/hr/candidates/[id]`; archive at
- * `/hr/candidates/archive`.
+ * Header buttons (mirror the Daily Ops pattern with Wave times):
+ *   - Add candidate            (primary blue)
+ *   - Statuses                 (config page at /hr/candidates/statuses)
+ *   - Onboarding template      (config page at /hr/candidates/onboarding-template)
+ *   - Archive                  (the /archive view)
+ *
+ * Detail page at `/hr/candidates/[id]`.
  */
 export default async function CandidatesPage() {
   await requireManagement();
-  const [statuses, candidates, onboardingTemplate] = await Promise.all([
+  const [statuses, candidates] = await Promise.all([
     listCandidateStatuses(),
     listActiveCandidates(),
-    listOnboardingTemplate(),
   ]);
 
   return (
@@ -33,14 +38,29 @@ export default async function CandidatesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Candidates</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {candidates.length} active across {statuses.filter((s) => s.active).length} statuses.
+            {candidates.length} active across{" "}
+            {statuses.filter((s) => s.active).length} statuses.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <CandidateFormDialog statuses={statuses} />
           <Link
+            href="/hr/candidates/statuses"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <Settings2 className="h-4 w-4" />
+            Statuses
+          </Link>
+          <Link
+            href="/hr/candidates/onboarding-template"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <ClipboardList className="h-4 w-4" />
+            Onboarding template
+          </Link>
+          <Link
             href="/hr/candidates/archive"
-            className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
             <Archive className="h-4 w-4" />
             Archive
@@ -54,9 +74,6 @@ export default async function CandidatesPage() {
           </Link>
         </div>
       </div>
-
-      <CandidateStatusesAdmin statuses={statuses} />
-      <OnboardingTemplateAdmin items={onboardingTemplate} />
 
       <CandidatesList candidates={candidates} statuses={statuses} />
     </div>

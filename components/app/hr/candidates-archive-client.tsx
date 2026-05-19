@@ -1,27 +1,32 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { ArchivedCandidateRow } from "@/lib/queries/hr-candidates-types";
+import {
+  CANDIDATE_STATUS_CHIP_CLASSES,
+  formatPhone,
+  type ArchivedCandidateRow,
+} from "@/lib/queries/hr-candidates-types";
 
 type Tab = "all" | "hired" | "declined" | "other";
 
 /**
- * Render-prop client that owns the tab + search state for the archive
- * page. We push the active tab to the URL so the back button works
- * naturally and tabs are linkable. Search is client-only — archives
- * stay short enough that a fuzzy filter in memory is fine.
+ * Tab + search + list rendering for the archive page. Lives entirely
+ * on the client so the page can pass its data array down as a plain
+ * prop (Server Components cannot pass function children to Client
+ * Components — earlier render-prop shape was the cause of the
+ * server-error landing).
  */
 export function CandidatesArchiveClient({
   rows,
   initialTab,
-  children,
 }: {
   rows: ArchivedCandidateRow[];
   initialTab: Tab;
-  children: (filtered: ArchivedCandidateRow[]) => React.ReactNode;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -78,7 +83,71 @@ export function CandidatesArchiveClient({
           />
         </div>
       </div>
-      {children(filtered)}
+
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {filtered.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">
+            Nothing in this view.
+          </p>
+        ) : (
+          <ul className="divide-y">
+            {filtered.map((r) => (
+              <li
+                key={r.id}
+                className="px-4 py-3 flex items-center gap-3 flex-wrap"
+              >
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Link
+                      href={`/hr/candidates/${r.id}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {r.full_name}
+                    </Link>
+                    <span
+                      className={cn(
+                        "inline-flex items-center h-5 px-2 rounded-full text-[10px] font-semibold uppercase tracking-wider",
+                        CANDIDATE_STATUS_CHIP_CLASSES[r.status_color],
+                      )}
+                    >
+                      {r.status_name}
+                    </span>
+                    {r.outcome === "hired" && (
+                      <span className="inline-flex items-center h-5 px-2 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                        hired
+                      </span>
+                    )}
+                    {r.outcome === "declined" && (
+                      <span className="inline-flex items-center h-5 px-2 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                        declined
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.phone_display && (
+                      <span className="mr-3">
+                        {formatPhone(r.phone_digits) || r.phone_display}
+                      </span>
+                    )}
+                    Archived{" "}
+                    {r.archived_at
+                      ? format(parseISO(r.archived_at), "MMM d, yyyy")
+                      : "—"}
+                  </div>
+                </div>
+                {r.outcome === "hired" && r.converted_driver_id && (
+                  <Link
+                    href={`/drivers/${r.converted_driver_id}`}
+                    className="text-xs underline text-muted-foreground hover:text-foreground"
+                  >
+                    Open driver →
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </>
   );
 }

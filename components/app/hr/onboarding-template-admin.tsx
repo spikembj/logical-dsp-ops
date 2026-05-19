@@ -4,9 +4,6 @@ import { useState, useTransition, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
   GripVertical,
   Pencil,
   Check,
@@ -24,12 +21,11 @@ import {
 import type { CandidateOnboardingTemplateItem } from "@/lib/queries/hr-candidates-types";
 
 /**
- * Inline editor for the onboarding paperwork list. Sits below Manage
- * Statuses on /hr/candidates, collapsible. Same patterns we use
- * everywhere: drag to reorder, click pencil to rename inline, Active
- * toggle to hide from candidate checklists without losing history,
- * trash to delete (cascades to all candidates' completion stamps for
- * that item).
+ * Editor for the onboarding paperwork list. Lives on its own page at
+ * /hr/candidates/onboarding-template. Same patterns we use everywhere:
+ * drag to reorder, click pencil to rename inline, Active toggle to
+ * hide from candidate checklists without losing history, trash to
+ * delete (cascades to all candidates' completion stamps for that item).
  */
 export function OnboardingTemplateAdmin({
   items,
@@ -38,7 +34,6 @@ export function OnboardingTemplateAdmin({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
   const [order, setOrder] = useState<CandidateOnboardingTemplateItem[]>(items);
 
   const lastItemsRef = useRef(items);
@@ -90,60 +85,39 @@ export function OnboardingTemplateAdmin({
   }
 
   return (
-    <section className="rounded-xl border bg-card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full px-4 py-2.5 flex items-center gap-2 text-sm hover:bg-muted/40 transition-colors"
-        aria-expanded={open}
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        )}
-        <ClipboardList className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">Manage onboarding checklist</span>
-        <span className="text-xs text-muted-foreground ml-auto">
-          {items.filter((i) => i.active).length} active · {items.length} total
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t p-3 space-y-3 bg-muted/10">
-          <AddItemRow
-            nextSortOrder={
-              (order.reduce((m, s) => Math.max(m, s.sort_order), 0) || 0) + 10
-            }
-            onAdded={() => router.refresh()}
+    <div className="space-y-3">
+      <AddItemRow
+        nextSortOrder={
+          (order.reduce((m, s) => Math.max(m, s.sort_order), 0) || 0) + 10
+        }
+        onAdded={() => router.refresh()}
+      />
+      <div className="rounded-md border divide-y bg-card">
+        {order.map((s) => (
+          <ItemRow
+            key={s.id}
+            item={s}
+            isDragging={dragId === s.id}
+            isDragOver={dragOverId === s.id && dragId !== s.id}
+            onDragStart={() => setDragId(s.id)}
+            onDragEnter={() => {
+              if (dragId && dragId !== s.id) setDragOverId(s.id);
+            }}
+            onDragEnd={() => {
+              setDragId(null);
+              setDragOverId(null);
+            }}
+            onDrop={() => handleDrop(s.id)}
           />
-          <div className="rounded-md border divide-y bg-card">
-            {order.map((s) => (
-              <ItemRow
-                key={s.id}
-                item={s}
-                isDragging={dragId === s.id}
-                isDragOver={dragOverId === s.id && dragId !== s.id}
-                onDragStart={() => setDragId(s.id)}
-                onDragEnter={() => {
-                  if (dragId && dragId !== s.id) setDragOverId(s.id);
-                }}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setDragOverId(null);
-                }}
-                onDrop={() => handleDrop(s.id)}
-              />
-            ))}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Items appear on every candidate whose status has the
-            onboarding flag. Drag to reorder. Active off hides an item
-            from new checklists without losing past completion records.
-          </p>
-        </div>
-      )}
-    </section>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Items appear on every candidate whose status has the onboarding
+        flag set. Drag to reorder. Toggle <strong>active</strong> off to
+        hide an item from new checklists without losing past completion
+        records.
+      </p>
+    </div>
   );
 }
 

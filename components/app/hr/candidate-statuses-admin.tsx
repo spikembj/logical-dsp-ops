@@ -10,9 +10,6 @@ import {
   X,
   Trash2,
   Plus,
-  Settings2,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -30,13 +27,11 @@ import {
 } from "@/lib/queries/hr-candidates-types";
 
 /**
- * Inline status admin — lives in a collapsible panel above the kanban.
+ * Status admin — lives on its own page at /hr/candidates/statuses.
  * Drag rows to reorder, click pencil to rename inline, click color
- * swatch to recolor, toggle Active / Declined chips. Same affordances
- * as Shops admin (drag + inline edit) plus the color picker.
- *
- * Collapsed by default. The user opens it when they want to manage
- * statuses; otherwise it stays out of the way.
+ * swatch to recolor, toggle Active / declined-flag / onboarding chips.
+ * Same affordances as Shops admin (drag + inline edit) plus the color
+ * picker and the two HR-specific behavior toggles.
  */
 export function CandidateStatusesAdmin({
   statuses,
@@ -45,7 +40,6 @@ export function CandidateStatusesAdmin({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
   const [order, setOrder] = useState<CandidateStatusRow[]>(statuses);
   const lastStatusesRef = useRef(statuses);
   if (lastStatusesRef.current !== statuses) {
@@ -99,60 +93,40 @@ export function CandidateStatusesAdmin({
   }
 
   return (
-    <section className="rounded-xl border bg-card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full px-4 py-2.5 flex items-center gap-2 text-sm hover:bg-muted/40 transition-colors"
-        aria-expanded={open}
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        )}
-        <Settings2 className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium">Manage statuses</span>
-        <span className="text-xs text-muted-foreground ml-auto">
-          {statuses.filter((s) => s.active).length} active · {statuses.length} total
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t p-3 space-y-3 bg-muted/10">
-          <AddStatusRow
-            nextSortOrder={
-              (order.reduce((m, s) => Math.max(m, s.sort_order), 0) || 0) + 10
-            }
-            onAdded={() => router.refresh()}
+    <div className="space-y-3">
+      <AddStatusRow
+        nextSortOrder={
+          (order.reduce((m, s) => Math.max(m, s.sort_order), 0) || 0) + 10
+        }
+        onAdded={() => router.refresh()}
+      />
+      <div className="rounded-md border divide-y bg-card">
+        {order.map((s) => (
+          <StatusRow
+            key={s.id}
+            status={s}
+            isDragging={dragId === s.id}
+            isDragOver={dragOverId === s.id && dragId !== s.id}
+            onDragStart={() => setDragId(s.id)}
+            onDragEnter={() => {
+              if (dragId && dragId !== s.id) setDragOverId(s.id);
+            }}
+            onDragEnd={() => {
+              setDragId(null);
+              setDragOverId(null);
+            }}
+            onDrop={() => handleDrop(s.id)}
           />
-          <div className="rounded-md border divide-y bg-card">
-            {order.map((s) => (
-              <StatusRow
-                key={s.id}
-                status={s}
-                isDragging={dragId === s.id}
-                isDragOver={dragOverId === s.id && dragId !== s.id}
-                onDragStart={() => setDragId(s.id)}
-                onDragEnter={() => {
-                  if (dragId && dragId !== s.id) setDragOverId(s.id);
-                }}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setDragOverId(null);
-                }}
-                onDrop={() => handleDrop(s.id)}
-              />
-            ))}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Drag to reorder. Click the color swatch to pick a new one. Toggle
-            <em> declined-flag</em> on for any status that should warn HR when a
-            candidate with the same phone reapplies.
-          </p>
-        </div>
-      )}
-    </section>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Drag rows to reorder. Click the color swatch to recolor. Toggle{" "}
+        <strong>declined-flag</strong> on any status that should warn HR when a
+        candidate with the same phone reapplies; toggle{" "}
+        <strong>onboarding</strong> on any status whose candidates should see
+        the onboarding checklist on their detail page.
+      </p>
+    </div>
   );
 }
 

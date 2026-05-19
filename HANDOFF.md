@@ -108,11 +108,16 @@ use by the user, their boss, and Manny (test dispatcher).
   dialog (gated on all active onboarding items checked; creates the
   drivers row with `candidate_id` FK via the atomic
   `convert_candidate_to_driver()` RPC, then archives the candidate).
-- **Onboarding template editor** — collapsible inline panel on
-  `/hr/candidates` below Manage Statuses. Drag / rename / Active toggle /
-  delete (cascades to completion stamps). 10 default items seeded
-  (I-9, W-4, drug test scheduled/passed, background submitted/cleared,
-  direct deposit, trainer assigned, start date confirmed, uniform issued).
+- **Statuses admin** at `/hr/candidates/statuses` — drag-to-reorder,
+  rename, recolor (12-color palette), Active / declined-flag /
+  onboarding toggles. Reached from the Statuses button in the
+  candidates page header (Daily Ops Wave times pattern).
+- **Onboarding template editor** at `/hr/candidates/onboarding-template` —
+  drag / rename / Active toggle / delete (cascades to completion stamps).
+  10 default items seeded (I-9, W-4, drug test scheduled/passed,
+  background submitted/cleared, direct deposit, trainer assigned, start
+  date confirmed, uniform issued). Reached from the Onboarding template
+  button in the candidates page header.
 - **Candidates archive** at `/hr/candidates/archive` — every archived
   candidate (hired + declined + manually-archived) with All / Hired /
   Declined / Other tabs and client-side search. All-time. Hired rows
@@ -459,9 +464,11 @@ Plus all prior migrations.
 │   │   │   ├── page.tsx              # HR landing — Phase 3 Pass A
 │   │   │   ├── duties/page.tsx       # HR-specific checklist — Pass B
 │   │   │   └── candidates/
-│   │   │       ├── page.tsx          # Kanban — Pass C.A
-│   │   │       ├── [id]/page.tsx     # Detail page — Pass C.B
-│   │   │       └── archive/page.tsx  # Archive view — Pass C.B
+│   │   │       ├── page.tsx                       # Kanban — Pass C.A
+│   │   │       ├── [id]/page.tsx                  # Detail page — Pass C.B
+│   │   │       ├── archive/page.tsx               # Archive view — Pass C.B
+│   │   │       ├── statuses/page.tsx              # Statuses admin
+│   │   │       └── onboarding-template/page.tsx   # Onboarding template admin
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
