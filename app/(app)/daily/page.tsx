@@ -11,8 +11,10 @@ import {
 } from "@/lib/queries/daily-ops";
 import { listDrivers } from "@/lib/queries/drivers";
 import { listVehicles } from "@/lib/queries/fleet";
+import { listTodaysInterviews } from "@/lib/queries/hr-interviews";
 import { DateNav } from "@/components/app/daily-ops/date-nav";
 import { DailyRoster } from "@/components/app/daily-ops/daily-roster";
+import { InterviewsTodaySection } from "@/components/app/daily-ops/interviews-today-section";
 
 interface PageProps {
   searchParams: Promise<{ date?: string }>;
@@ -40,15 +42,23 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
       me.role as UserRole,
     );
 
-  const [roster, waveTimes, drivers, vehicles, prevDate, lastDriverByVehicle] =
-    await Promise.all([
-      getRosterForDate(date),
-      listWaveTimes(),
-      listDrivers(),
-      listVehicles(),
-      getMostRecentRosterDate(date),
-      getMostRecentDriverByVehicle(date),
-    ]);
+  const [
+    roster,
+    waveTimes,
+    drivers,
+    vehicles,
+    prevDate,
+    lastDriverByVehicle,
+    todaysInterviews,
+  ] = await Promise.all([
+    getRosterForDate(date),
+    listWaveTimes(),
+    listDrivers(),
+    listVehicles(),
+    getMostRecentRosterDate(date),
+    getMostRecentDriverByVehicle(date),
+    listTodaysInterviews(date),
+  ]);
 
   // Picker pools: drivers must be active + position=driver; vans must be
   // operational. We do NOT remove already-rostered drivers/vans here —
@@ -119,6 +129,8 @@ export default async function DailyOpsPage({ searchParams }: PageProps) {
       </div>
 
       <DateNav date={date} />
+
+      <InterviewsTodaySection rows={todaysInterviews} />
 
       <DailyRoster
         date={date}

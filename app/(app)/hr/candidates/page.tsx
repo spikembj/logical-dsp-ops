@@ -4,6 +4,7 @@ import {
   Archive,
   Settings2,
   ClipboardList,
+  HelpCircle,
 } from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
@@ -57,6 +58,13 @@ export default async function CandidatesPage() {
           >
             <ClipboardList className="h-4 w-4" />
             Onboarding template
+          </Link>
+          <Link
+            href="/hr/candidates/interview-questions"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Interview questions
           </Link>
           <Link
             href="/hr/candidates/archive"

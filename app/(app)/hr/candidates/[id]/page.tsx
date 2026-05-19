@@ -10,10 +10,12 @@ import {
   formatPhone,
   CANDIDATE_STATUS_CHIP_CLASSES,
 } from "@/lib/queries/hr-candidates";
+import { getInterviewResponseFor } from "@/lib/queries/hr-interviews";
 import { CandidateFormDialog } from "@/components/app/hr/candidate-form-dialog";
 import { CandidateOnboardingChecklist } from "@/components/app/hr/candidate-onboarding-checklist";
 import { ConvertToDriverDialog } from "@/components/app/hr/convert-to-driver-dialog";
 import { CandidateDeleteButton } from "@/components/app/hr/candidate-delete-button";
+import { DispatcherInterviewCard } from "@/components/app/hr/dispatcher-interview-card";
 import { cn } from "@/lib/utils";
 
 interface PageProps {
@@ -34,9 +36,10 @@ interface PageProps {
 export default async function CandidateDetailPage({ params }: PageProps) {
   await requireManagement();
   const { id } = await params;
-  const [candidate, statuses] = await Promise.all([
+  const [candidate, statuses, interview] = await Promise.all([
     getCandidateById(id),
     listCandidateStatuses(),
+    getInterviewResponseFor(id),
   ]);
   if (!candidate) notFound();
 
@@ -119,6 +122,10 @@ export default async function CandidateDetailPage({ params }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2 space-y-4">
           <DetailCard candidate={candidate} />
+          <DispatcherInterviewCard
+            candidateId={candidate.id}
+            response={interview}
+          />
         </div>
         {candidate.status_is_onboarding && (
           <CandidateOnboardingChecklist

@@ -14,7 +14,7 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A + C.B shipped** —
+all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A + C.B + D shipped** —
 coaching review queue + worst-10 panel at `/hr`; HR-specific duties
 checklist at `/hr/duties`; candidates pipeline kanban at `/hr/candidates`
 with inline status admin + onboarding-template admin, phone-normalized
@@ -122,6 +122,20 @@ use by the user, their boss, and Manny (test dispatcher).
   candidate (hired + declined + manually-archived) with All / Hired /
   Declined / Other tabs and client-side search. All-time. Hired rows
   link to the resulting `/drivers/[id]`.
+- **Dispatcher interviews** at `/daily/interviews/[id]` (Phase 3 Pass D) —
+  dispatcher-facing assessment form reached from a new "Today's
+  interviews" section on `/daily` (shown only when scheduled interviews
+  exist for the active date). Y/N + text questions; status dropdown
+  uses a narrow SECURITY DEFINER RPC so dispatchers cannot write to
+  other candidate columns (RLS UPDATE cannot restrict columns; the
+  RPC can). Dispatcher candidate read is gated to interview_dt within
+  ±7d AND not archived via a dedicated RLS policy. One response per
+  candidate, edit-in-place.
+- **Interview question template** at `/hr/candidates/interview-questions`
+  (Pass D) — 16 seeded questions, same drag/rename/active/delete
+  pattern as the other admin pages, plus a per-row Y/N vs Text picker.
+- **HR-side dispatcher interview card** on `/hr/candidates/[id]` —
+  read-only display of the response + answers + who/when + Edit link.
 - **HR Duties** at `/hr/duties` (Phase 3 Pass B) — HR-specific checklist
   on the same engine as `/duties` via a new `scope` column on
   `duties_template_items` (`'ops' | 'hr'`). Daily renders as a flat list
@@ -344,10 +358,14 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 34 migrations in `supabase/migrations/` have been run against
+**All 35 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260519035336  hr_interview_responses (dispatcher_interview_questions +
+                _responses + _answers tables · candidates_select_for_dispatchers
+                RLS · candidate_statuses_select loosened to is_operations() ·
+                dispatcher_change_candidate_status() RPC · 16-question seed)
 20260519013623  hr_candidates_pass_b (candidate_statuses.is_onboarding
                 column + convert_candidate_to_driver(uuid, text, date,
                 text[]) RPC for atomic candidate→driver conversion)
@@ -453,9 +471,10 @@ Plus all prior migrations.
 │   │   │   ├── users/                # Management page (invite + reset)
 │   │   │   └── waves/                # Wave-times CRUD (mgmt only)
 │   │   ├── daily/
-│   │   │   ├── page.tsx              # Roster (van-first inline editor)
-│   │   │   ├── eod/page.tsx          # End-of-day form
-│   │   │   └── paper/page.tsx        # Printable Daily Paper
+│   │   │   ├── page.tsx                       # Roster (van-first inline editor)
+│   │   │   ├── eod/page.tsx                   # End-of-day form
+│   │   │   ├── interviews/[id]/page.tsx       # Dispatcher interview — Pass D
+│   │   │   └── paper/page.tsx                 # Printable Daily Paper
 │   │   ├── drivers/
 │   │   │   ├── [id]/                 # Driver detail (4 tabs)
 │   │   │   └── page.tsx              # Unified Drivers + Helpers list
@@ -468,7 +487,8 @@ Plus all prior migrations.
 │   │   │       ├── [id]/page.tsx                  # Detail page — Pass C.B
 │   │   │       ├── archive/page.tsx               # Archive view — Pass C.B
 │   │   │       ├── statuses/page.tsx              # Statuses admin
-│   │   │       └── onboarding-template/page.tsx   # Onboarding template admin
+│   │   │       ├── onboarding-template/page.tsx   # Onboarding template admin
+│   │   │       └── interview-questions/page.tsx   # Interview questions — Pass D
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
