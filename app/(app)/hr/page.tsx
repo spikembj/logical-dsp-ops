@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Inbox, CheckCircle2, AlertTriangle, ListTodo } from "lucide-react";
+import { Inbox, CheckCircle2, AlertTriangle, ListTodo, Users } from "lucide-react";
 import { requireManagement } from "@/lib/auth/require-role";
 import {
   getHrCoachingCounts,
@@ -60,6 +60,13 @@ export default async function HrPage({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/hr/candidates"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            <Users className="h-4 w-4" />
+            Candidates
+          </Link>
           <Link
             href="/hr/duties"
             className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"

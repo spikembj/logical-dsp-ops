@@ -14,12 +14,13 @@
 ## 1. Current Status
 
 **Phase:** Phase 1 + Phase 1.5 + Phase 2 (Fleet) + Phase 2.5 (Daily Ops)
-all shipped. **Phase 3 (HR & Hiring) Passes A + B shipped** — coaching
-review queue + worst-10 panel live at `/hr`; HR-specific duties
-checklist live at `/hr/duties` (scope column on duties_template_items,
-flat-list rendering, 10 seed items). Live in production at
-**`https://logical-ops.vercel.app`**. In active daily use by the user,
-their boss, and Manny (test dispatcher).
+all shipped. **Phase 3 (HR & Hiring) Passes A + B + C.A shipped** —
+coaching review queue + worst-10 panel at `/hr`; HR-specific duties
+checklist at `/hr/duties`; candidates pipeline kanban at
+`/hr/candidates` with inline status admin, phone-normalized live dedup,
+9 seeded statuses + 10 seeded onboarding template items. Live in
+production at **`https://logical-ops.vercel.app`**. In active daily
+use by the user, their boss, and Manny (test dispatcher).
 
 **What works end-to-end:**
 
@@ -89,6 +90,18 @@ their boss, and Manny (test dispatcher).
   worst-10 panel (90-day raw count, excludes trainings/discussions/voids,
   category filter via `?cat=`). Management-only — dispatchers gated out
   via middleware on `/hr/*` and the sidebar link is role-hidden.
+- **HR Candidates** at `/hr/candidates` (Phase 3 Pass C.A) —
+  collapsible-by-status pipeline view matching the dispatcher's
+  spreadsheet kanban. 9 seeded statuses (TO CHECK IN ON →
+  WAITING ON RESPONSE → NO SHOW FOR INTERVIEW / DUT4 / DUT7 / TO
+  THINK ABOUT / DONT HIRE / TO HIRE / ONBOARDING) editable inline
+  via drag-to-reorder, rename, recolor (12-color palette), Active
+  toggle, `treat_as_declined` toggle. Add candidate dialog runs a
+  debounced phone lookup against prior declined rows and warns if
+  there is a hit. Phone normalized to 10 digits in a DB trigger
+  (`normalize_phone`) so dedup is exact. Detail page, onboarding
+  checklist UI, Convert-to-driver action, and Archive view land in
+  Pass C.B.
 - **HR Duties** at `/hr/duties` (Phase 3 Pass B) — HR-specific checklist
   on the same engine as `/duties` via a new `scope` column on
   `duties_template_items` (`'ops' | 'hr'`). Daily renders as a flat list
@@ -311,10 +324,15 @@ NEXT_PUBLIC_DEFAULT_TZ        # = America/Denver
 
 ## 5. Database state
 
-**All 32 migrations in `supabase/migrations/` have been run against
+**All 33 migrations in `supabase/migrations/` have been run against
 the live DB.** New since the previous HANDOFF (most recent first):
 
 ```
+20260519003358  hr_candidates (candidate_statuses + candidates +
+                candidate_onboarding_template_items +
+                candidate_onboarding_completion + drivers.candidate_id +
+                normalize_phone() helper + candidates_sync_phone trigger +
+                seed of 9 statuses and 10 onboarding items)
 20260518233330  hr_duties_scope (duties_template_items.scope column +
                 partial index + 10-item HR daily seed lifted from
                 the dispatcher's spreadsheet)
@@ -421,7 +439,8 @@ Plus all prior migrations.
 │   │   ├── duties/page.tsx           # Duties checklist + inline edit
 │   │   ├── hr/
 │   │   │   ├── page.tsx              # HR landing — Phase 3 Pass A
-│   │   │   └── duties/page.tsx       # HR-specific checklist — Pass B
+│   │   │   ├── duties/page.tsx       # HR-specific checklist — Pass B
+│   │   │   └── candidates/page.tsx   # Candidates kanban — Pass C.A
 │   │   ├── fleet/
 │   │   │   ├── page.tsx              # Fleet dashboard (3 tiles + heroes + parts + PAVE)
 │   │   │   ├── vans/page.tsx         # Vehicles list
@@ -451,7 +470,9 @@ Plus all prior migrations.
 │   │   │                             # vehicle-qr-button, qr-sheet,
 │   │   │                             # pave-tile, shops-admin
 │   │   ├── hr/                       # coaching-review-queue,
-│   │   │                             # worst-offenders-panel
+│   │   │                             # worst-offenders-panel,
+│   │   │                             # candidates-list, candidate-form-dialog,
+│   │   │                             # candidate-statuses-admin
 │   │   └── …driver-tabs, driver-form-dialog, sidebar-nav, sign-out, theme-*
 │   └── ui/                           # shadcn (base-ui flavor) primitives
 ├── lib/
